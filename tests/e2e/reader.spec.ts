@@ -80,3 +80,28 @@ test('quitting right after turning pages keeps the latest position', async () =>
   expect(lib.books[id].location).toMatch(/^epubcfi\(/)
   expect(lib.books[id].location).not.toBe(settled)
 })
+
+test('a note typed for a new highlight survives a click back into the book', async () => {
+  const library = await makeLibrary()
+  const { app, page } = await launchApp({ library })
+  const id = await openBook(page, 'epub')
+  const frame = await contentFrame(page)
+  await frame.evaluate(() => {
+    const p = [...document.querySelectorAll('p')].find(x => x.firstChild?.nodeType === Node.TEXT_NODE && (x.firstChild as Text).data.trim().split(/\s+/).length > 8)!
+    const r = document.createRange()
+    r.setStart(p.firstChild!, 0)
+    r.setEnd(p.firstChild!, 25)
+    document.getSelection()!.removeAllRanges()
+    document.getSelection()!.addRange(r)
+    p.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+  })
+  await page.getByTestId('hl-note').click()
+  await page.getByTestId('hl-note-input').fill('my own thought')
+  // click somewhere in the book instead of pressing Save
+  await frame.evaluate(() => document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })))
+  await expect(page.getByTestId('hl-popup')).toBeHidden()
+  await expect.poll(() => page.evaluate(b => window.api.highlights.list(b), id)).toEqual([
+    expect.objectContaining({ note: 'my own thought', color: 'yellow' })
+  ])
+  await app.close()
+})

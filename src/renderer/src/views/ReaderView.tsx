@@ -97,6 +97,10 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   const overlays = useRef({ popup: false, toc: false, menu: false })
   overlays.current = { popup: popup !== null, toc: tocOpen, menu: menuOpen }
   const lastColor = useRef<HighlightColor>('yellow')
+  // The popup's note text as typed, so a click back into the book can save it instead of dropping it.
+  const popupRef = useRef<PopupState | null>(null)
+  popupRef.current = popup
+  const noteDraft = useRef('')
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const showChrome = useCallback((): void => {
@@ -376,6 +380,17 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       })
     }
 
+    // A click in the book closes the popup, but a typed note is saved, not lost: a new selection
+    // becomes a highlight in the last used color, an existing highlight gets the edited note.
+    const dismissPopup = (): void => {
+      const p = popupRef.current
+      const draft = noteDraft.current.trim()
+      noteDraft.current = ''
+      const saved = p?.mode === 'edit' ? (p.highlight.note ?? '') : ''
+      if (p && draft && draft !== saved) p.onNote(draft)
+      else setPopup(null)
+    }
+
     // 5. Per-section listeners on the iframe document.
     const onLoad = (e: Event): void => {
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail
@@ -387,7 +402,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       })
       doc.addEventListener('pointerdown', () => {
         activity(true)
-        setPopup(null)
+        dismissPopup()
       })
       doc.addEventListener('pointerup', () => {
         activity(true)
@@ -667,7 +682,16 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
           onClose={() => setTocOpen(false)}
         />
       )}
-      {popup && <HighlightPopup key={`${popup.mode}-${popup.rect.x}-${popup.rect.y}`} state={popup} onClose={() => setPopup(null)} />}
+      {popup && (
+        <HighlightPopup
+          key={`${popup.mode}-${popup.rect.x}-${popup.rect.y}`}
+          state={popup}
+          onClose={() => setPopup(null)}
+          onDraft={d => {
+            noteDraft.current = d
+          }}
+        />
+      )}
     </div>
   )
 }
