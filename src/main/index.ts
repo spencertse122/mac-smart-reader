@@ -1,6 +1,12 @@
-import { app, BrowserWindow, net, protocol, shell } from 'electron'
+import { app, BrowserWindow, Menu, net, protocol, shell } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { IPC } from '../shared/ipc'
+import { SettingsStore } from './settings'
+import { PtyService } from './pty/ptyService'
+import { registerIpc } from './ipc'
+import { buildMenu } from './menu'
+import { setRecoveryListener } from './store/atomic'
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
@@ -60,9 +66,41 @@ export function createMainWindow(): BrowserWindow {
   return win
 }
 
-app.whenReady().then(() => {
+let mainWindow: BrowserWindow | null = null
+
+function templateDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'workspace-template') : join(app.getAppPath(), 'resources', 'workspace-template')
+}
+
+async function bootstrap(): Promise<void> {
   registerAppProtocol()
-  createMainWindow()
-})
+  const send = (channel: string, ...args: unknown[]): void => mainWindow?.webContents.send(channel, ...args)
+  const settings = new SettingsStore(app.getPath('userData'))
+  const pty = new PtyService(send)
+  const setMenu = (recent: string[]): void => Menu.setApplicationMenu(buildMenu(a => send(IPC.eventMenu, a), recent))
+  const ipc = registerIpc({
+    getWindow: () => mainWindow,
+    settings,
+    templateDir: templateDir(),
+    pty,
+    onSettingsChanged: s => setMenu(s.recentLibraries)
+  })
+  setRecoveryListener(e =>
+    send(IPC.eventToast, {
+      kind: 'warning',
+      message: e.restoredFromBackup
+        ? `A data file was damaged and restored from backup (${e.path}).`
+        : `A data file was damaged and reset (${e.path}). The damaged copy was kept.`
+    })
+  )
+  setMenu((await settings.get()).recentLibraries)
+  mainWindow = createMainWindow()
+  mainWindow.on('closed', () => {
+    ipc.closeAll()
+    mainWindow = null
+  })
+}
+
+app.whenReady().then(bootstrap)
 
 app.on('window-all-closed', () => app.quit())
