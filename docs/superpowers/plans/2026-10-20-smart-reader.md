@@ -15,7 +15,7 @@
 - Book metadata and covers are extracted in the renderer using foliate-js parsers, so there is one parser for every format, and sent to main through `library.saveMetadata`.
 - `Highlight` gains `position` (book fraction 0–1, used for ordering). `Book` gains `fileSize`, `mtimeMs`, `metadataExtracted`, `hasCover` and `missing`. `ReviewLogEntry` gains `wasNew` (used for the new-cards-per-day quota).
 - The terminal uses light/dark colors that follow the system appearance, not the reader theme. The reader theme can be sepia or gray, which doesn't suit a terminal.
-- The installer downloads with `gh` (the repo is private), so the README's one-liner fetches `install.sh` through `gh api` instead of raw `curl`.
+- The installer downloads with `gh` (the repo is private), so the README's one-liner fetches `install.sh` through `gh api` instead of raw `curl`. *(Superseded in the final fix wave: the repo `spencertse122/mac-smart-reader` is public, so the README one-liner is raw `curl`, and `install.sh` uses `gh` when logged in, else `curl` via the releases API.)*
 - There is a 7th skill, `learning-coach`, that carries the methodology rules. The other 6 skills reference it.
 - No `electron-store`, `chokidar` or `ulid`. They are ESM-only and unnecessary. Settings use our own JSON store; `prompts.jsonl` is watched with `fs.watchFile` polling (1s), which survives agents writing via rename; ids use `crypto.randomUUID()`.
 
@@ -55,7 +55,7 @@ The user asked for **Sonnet subagents to write the code and the controller (Opus
 | 3a | T9 Library view (**sonnet**), T10 Reader + highlighting (**opus**), T11 Review UI (**sonnet**), T12 Terminal panel (**sonnet**) | W2 | 4 parallel; each replaces only its own stub files |
 | 3b | T13 Pomodoro + session tracking (**sonnet**), T14 Stats view (**sonnet**) | W2 (T13 also uses T10's bus events, already defined in T8) | 2 parallel |
 | 4 | T15 Full-journey E2E + CI (**sonnet**), T16 Packaging + release + install.sh + README (**sonnet**) | W3 | 2 parallel |
-| 5 | Final branch review, push to private GitHub repo, tag `v0.1.0`, watch the release build (**controller**) | W4 | — |
+| 5 | Final branch review, push to the GitHub repo `spencertse122/mac-smart-reader`, tag `v0.1.0`, watch the release build (**controller**) | W4 | — |
 
 **Worktree protocol for every parallel subagent:**
 ```bash
@@ -6528,7 +6528,7 @@ const path = resolve(__dirname, '../../install.sh')
 it('install.sh is valid bash and targets the right repo and assets', async () => {
   execFileSync('bash', ['-n', path])
   const s = await readFile(path, 'utf8')
-  expect(s).toContain('afreeelfdobby934-sys/mac-smart-reader')
+  expect(s).toContain('spencertse122/mac-smart-reader')
   expect(s).toContain('gh release download')
   expect(s).toContain('xattr -dr com.apple.quarantine')
   expect(s).toMatch(/arm64/)
@@ -6551,7 +6551,7 @@ Expected: FAIL (file missing).
 # Usage: curl -fsSL <raw url>/install.sh | bash      (or: bash install.sh)
 set -euo pipefail
 
-REPO="${SMART_READER_REPO:-afreeelfdobby934-sys/mac-smart-reader}"
+REPO="${SMART_READER_REPO:-spencertse122/mac-smart-reader}"
 APP="/Applications/Smart Reader.app"
 
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -6699,8 +6699,8 @@ jobs:
 2. **Install** (macOS 13+):
    ```bash
    brew install gh        # if you don't have it
-   gh auth login          # once; the repo is private
-   gh api repos/afreeelfdobby934-sys/mac-smart-reader/contents/install.sh --jq .content | base64 -d | bash
+   gh auth login          # once; only needed if the repo is private
+   gh api repos/spencertse122/mac-smart-reader/contents/install.sh --jq .content | base64 -d | bash
    ```
    Explain that the same command updates the app, and why macOS quarantine is cleared (unsigned app). Include a manual install: download the DMG from Releases → drag to Applications → `xattr -dr com.apple.quarantine "/Applications/Smart Reader.app"`.
 3. **First run**: choose the books folder; what the app creates inside it (`.smartreader/`, `knowledge/`, skills, `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`); your books are never modified or uploaded.
@@ -6732,10 +6732,10 @@ git commit -m "build: mac packaging, release workflow, one-command installer, RE
 Run: `npm ci && npm run typecheck && npm test && npm run build && xvfb-run -a npx playwright test`
 Expected: all PASS. Record the counts.
 
-- [ ] **Step 3: Create the private repo and push** (requires user confirmation before running: outward-facing)
+- [ ] **Step 3: Create the repo and push** (note: the repo `spencertse122/mac-smart-reader` already exists and is public; the final fix wave switched the installer to `curl` with a `gh` fallback) (requires user confirmation before running: outward-facing)
 
 ```bash
-gh repo create afreeelfdobby934-sys/mac-smart-reader --private --source . --remote origin --push
+gh repo create spencertse122/mac-smart-reader --private --source . --remote origin --push
 ```
 Expected: the repo exists, `main` is pushed, and CI starts.
 
