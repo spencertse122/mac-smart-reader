@@ -12,7 +12,8 @@
       "node"
     ],
     "lib": [
-      "ES2023"
+      "ES2023",
+      "DOM"
     ],
     "noEmit": true,
     "composite": false
