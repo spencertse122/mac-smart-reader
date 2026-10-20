@@ -8,6 +8,8 @@ import { emitReader, onReader } from '../reader/bus'
 import { HIGHLIGHT_FILL, readerCss } from '../reader/readerStyles'
 import { contextFromRange, quoteFromRange } from '../reader/selection'
 import { findQuoteRange } from '../reader/anchor'
+import { drawable } from '../reader/drawable'
+import { NoteComposer } from '../reader/NoteComposer'
 import { lostAnchors } from '../reader/lostAnchors'
 import { HighlightPopup, type PopupState } from '../reader/HighlightPopup'
 import { ReaderToolbar } from '../reader/ReaderToolbar'
@@ -83,6 +85,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   const [chapter, setChapter] = useState('')
   const [fraction, setFraction] = useState(0)
   const [popup, setPopup] = useState<PopupState | null>(null)
+  const [composer, setComposer] = useState<{ location: string; chapter: string; position: number } | null>(null)
   const [tocOpen, setTocOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [chrome, setChrome] = useState(true)
@@ -94,8 +97,8 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   const settingsRef = useRef(state.settings)
   settingsRef.current = state.settings
   const initial = useRef({ location: book?.location ?? null, target })
-  const overlays = useRef({ popup: false, toc: false, menu: false })
-  overlays.current = { popup: popup !== null, toc: tocOpen, menu: menuOpen }
+  const overlays = useRef({ popup: false, toc: false, menu: false, composer: false })
+  overlays.current = { popup: popup !== null, toc: tocOpen, menu: menuOpen, composer: composer !== null }
   const lastColor = useRef<HighlightColor>('yellow')
   // The popup's note text as typed, so a click back into the book can save it instead of dropping it.
   const popupRef = useRef<PopupState | null>(null)
@@ -108,14 +111,14 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => {
       const o = overlays.current
-      if (!o.popup && !o.toc && !o.menu) setChrome(false)
+      if (!o.popup && !o.toc && !o.menu && !o.composer) setChrome(false)
     }, CHROME_HIDE_MS)
   }, [])
 
   // 14. Keep chrome up while an overlay is open and restart the fade when it closes.
   useEffect(() => {
     showChrome()
-  }, [popup, tocOpen, menuOpen, showChrome])
+  }, [popup, tocOpen, menuOpen, composer, showChrome])
   useEffect(() => () => clearTimeout(hideTimer.current), [])
 
   // 1–13, 15. The foliate view lifecycle for this book.
@@ -244,7 +247,8 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
 
     const closeOverlays = (): boolean => {
       const o = overlays.current
-      if (o.popup) setPopup(null)
+      if (o.composer) setComposer(null)
+      else if (o.popup) setPopup(null)
       else if (o.toc) setTocOpen(false)
       else return false
       return true
@@ -567,7 +571,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       // 3. Highlights must be known before init draws the first section.
       try {
         const list = await window.api.highlights.list(bookId)
-        byValue.current = new Map(list.map(h => [h.location, h]))
+        byValue.current = new Map(drawable(list).map(h => [h.location, h]))
       } catch {
         byValue.current = new Map()
       }
@@ -611,6 +615,13 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       void viewRef.current?.goTo(target)
     }))
 
+    // Notes: capture where the reader is right now, then open the composer.
+    cleanups.push(onReader('new-note', () => {
+      setPopup(null)
+      const p = position.current
+      setComposer({ location: p.cfi, chapter: p.chapter, position: p.fraction })
+    }))
+
     // 15. Teardown.
     return () => {
       disposed = true
@@ -646,7 +657,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   }, [ready, state.settings])
 
   const theme = state.settings?.readerTheme ?? 'white'
-  const chromeVisible = chrome || popup !== null || tocOpen || menuOpen
+  const chromeVisible = chrome || popup !== null || composer !== null || tocOpen || menuOpen
   // Fixed-layout pages are images of paper, so dark themes invert them instead of restyling text.
   const invert = fixedLayout && (theme === 'gray' || theme === 'night')
   return (
@@ -661,6 +672,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
         tocOpen={tocOpen}
         onBack={() => dispatch({ type: 'navigate', view: { name: 'library' } })}
         onToc={() => setTocOpen(o => !o)}
+        onNote={() => emitReader('new-note', {})}
         onMenuChange={setMenuOpen}
       />
       <div className={`reader-host${loading ? ' loading' : ''}${invert ? ' invert-pages' : ''}`} ref={hostRef} />
@@ -680,6 +692,21 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
             setTocOpen(false)
           }}
           onClose={() => setTocOpen(false)}
+        />
+      )}
+      {composer && (
+        <NoteComposer
+          onClose={() => setComposer(null)}
+          onSave={text => {
+            const c = composer
+            void window.api.highlights
+              .addNote(bookId, { location: c.location, chapter: c.chapter || null, position: c.position, text })
+              .then(() => {
+                setComposer(null)
+                emitReader('highlights-changed', { bookId })
+              })
+              .catch((err: Error) => toast(dispatch, 'error', `Could not save note: ${err.message}`))
+          }}
         />
       )}
       {popup && (

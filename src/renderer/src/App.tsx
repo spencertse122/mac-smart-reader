@@ -11,6 +11,7 @@ import { ReviewView } from './views/ReviewView'
 import { StatsView } from './views/StatsView'
 import { TerminalPanel } from './terminal/TerminalPanel'
 import { PomodoroProvider, usePomodoro } from './pomodoro/PomodoroProvider'
+import { emitReader } from './reader/bus'
 import { useReadingTracker } from './sessions/useReadingTracker'
 
 export function App() {
@@ -26,6 +27,8 @@ function Shell() {
   const pomodoroState = usePomodoro()
   const pomodoro = useRef(pomodoroState)
   pomodoro.current = pomodoroState
+  const viewName = useRef(state.view.name)
+  viewName.current = state.view.name
   useReadingTracker()
 
   useEffect(() => {
@@ -51,6 +54,11 @@ function Shell() {
         else if (a.type === 'open-library') void openLibrary(dispatch, a.path)
         else if (a.type === 'toggle-terminal') dispatch({ type: 'toggleTerminal' })
         else if (a.type === 'toggle-pomodoro') pomodoro.current.toggle()
+        else if (a.type === 'new-note') {
+          if (viewName.current === 'reader') emitReader('new-note', {})
+        } else if (a.type === 'continue-reading') {
+          // handled by the Continue Reading feature
+        }
       })
     ]
     return () => offs.forEach(off => off())

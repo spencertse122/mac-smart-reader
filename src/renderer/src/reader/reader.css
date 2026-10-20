@@ -176,3 +176,35 @@
 @media (prefers-reduced-motion: reduce) {
   .reader *, .hl-popup, .reader-menu, .toc-drawer { animation: none !important; transition: none !important; }
 }
+
+/* Note composer */
+.note-composer {
+  position: absolute; z-index: 50; top: 56px; right: 16px; width: 320px; padding: 10px; border-radius: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg-elevated); color: var(--text); box-shadow: var(--shadow-l); border: 1px solid var(--separator);
+  animation: reader-pop .14s ease-out; transform-origin: top right;
+}
+.note-composer textarea {
+  width: 100%; resize: none; border: 1px solid var(--separator); border-radius: 8px; padding: 8px 10px;
+  font: 13px/1.45 var(--font-ui); background: var(--bg); color: var(--text); outline: none;
+}
+.note-composer textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.note-composer-buttons { display: flex; gap: 6px; }
+.note-composer .btn { height: 26px; padding: 0 12px; font-size: 12px; }
+.note-composer .btn:disabled { opacity: .5; }
+
+/* Notes in the highlights panel */
+.hl-item.is-note { border-left-color: var(--separator); }
+.hl-item-head { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.hl-item-body { font-size: 13px; line-height: 1.4; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.hl-item-body.clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.hl-note-wrap { display: flex; flex-direction: column; }
+.hl-note-tools { display: flex; gap: 4px; padding: 0 8px 0 10px; }
+.hl-note-tools button { border: 0; background: transparent; color: var(--text-3); font-size: 11px; padding: 2px 4px; border-radius: 4px; cursor: default; }
+.hl-note-tools button:hover { background: var(--hover); color: var(--text); }
+.hl-note-tools button.danger:hover { color: var(--danger, #d33); }
+.hl-note-edit { padding: 4px 8px 4px 10px; display: flex; flex-direction: column; gap: 6px; }
+.hl-note-edit textarea {
+  width: 100%; resize: vertical; border: 1px solid var(--separator); border-radius: 8px; padding: 6px 8px;
+  font: 13px/1.45 var(--font-ui); background: var(--bg); color: var(--text); outline: none;
+}
