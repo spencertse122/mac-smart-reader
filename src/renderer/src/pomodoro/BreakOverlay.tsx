@@ -1,7 +1,9 @@
 import { useAppState } from '../state/appState'
+import { useCountdown } from './PomodoroProvider'
 
-export function BreakOverlay({ remainingMs, dueCount, onClose }: { remainingMs: number; dueCount: number; onClose: () => void }) {
+export function BreakOverlay({ dueCount, onClose }: { dueCount: number; onClose: () => void }) {
   const { dispatch } = useAppState()
+  const remainingMs = useCountdown()
   const total = Math.ceil(remainingMs / 1000)
   const time = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
   return (

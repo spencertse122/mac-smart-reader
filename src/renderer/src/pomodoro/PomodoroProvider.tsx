@@ -12,7 +12,6 @@ export type PomodoroPhase = Phase
 
 interface Ctx {
   state: PomodoroState
-  remainingMs: number
   cfg: PomodoroSettings
   toggle(): void
   skip(): void
@@ -20,6 +19,14 @@ interface Ctx {
 }
 
 const PomodoroContext = createContext<Ctx | null>(null)
+// Ticks every second only while the timer runs; consumed only by the countdown displays.
+const NowContext = createContext(0)
+
+export function useCountdown(): number {
+  const c = useContext(PomodoroContext)
+  const now = useContext(NowContext)
+  return c ? remaining(c.state, now) : 0
+}
 
 export function PomodoroProvider({ children }: { children: ReactNode }) {
   const { state: app, dispatch } = useAppState()
@@ -36,9 +43,11 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const run = useCallback((type: PomodoroAction['type']) => {
     const t = Date.now()
     const r = pomodoroReducer(stateRef.current, { type, now: t, cfg: cfgRef.current })
-    stateRef.current = r.state
-    setState(r.state)
-    setNow(t)
+    if (r.state !== stateRef.current) {
+      stateRef.current = r.state
+      setState(r.state)
+    }
+    if (r.state.running || r.event) setNow(t)
     if (r.event === 'workEnded') {
       breakStart.current = t
       if (cfgRef.current.sound) playChime()
@@ -74,15 +83,17 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => run('reset'), [run])
 
   const value = useMemo<Ctx>(
-    () => ({ state, remainingMs: remaining(state, now), cfg, toggle, skip, reset }),
-    [state, now, cfg, toggle, skip, reset]
+    () => ({ state, cfg, toggle, skip, reset }),
+    [state, cfg, toggle, skip, reset]
   )
   const inBreak = state.phase === 'break' || state.phase === 'longBreak'
 
   return (
     <PomodoroContext.Provider value={value}>
-      {children}
-      {overlayOpen && inBreak && <BreakOverlay remainingMs={value.remainingMs} dueCount={due} onClose={() => setOverlayOpen(false)} />}
+      <NowContext.Provider value={now}>
+        {children}
+        {overlayOpen && inBreak && <BreakOverlay dueCount={due} onClose={() => setOverlayOpen(false)} />}
+      </NowContext.Provider>
     </PomodoroContext.Provider>
   )
 }
@@ -90,7 +101,7 @@ export function PomodoroProvider({ children }: { children: ReactNode }) {
 export function usePomodoro(): { phase: PomodoroPhase; running: boolean; remainingMs: number; toggle(): void; skip(): void; reset(): void } {
   const c = useContext(PomodoroContext)
   if (!c) throw new Error('usePomodoro outside PomodoroProvider')
-  return { phase: c.state.phase, running: c.state.running, remainingMs: c.remainingMs, toggle: c.toggle, skip: c.skip, reset: c.reset }
+  return { phase: c.state.phase, running: c.state.running, remainingMs: remaining(c.state, Date.now()), toggle: c.toggle, skip: c.skip, reset: c.reset }
 }
 
 function fmt(ms: number): string {
@@ -102,6 +113,7 @@ export function PomodoroControl() {
   const c = useContext(PomodoroContext)
   const { dispatch } = useAppState()
   const [open, setOpen] = useState(false)
+  const remainingMs = useCountdown()
   if (!c) return null
   const { state, cfg } = c
   const set = (patch: Partial<PomodoroSettings>): void => void updateSettings(dispatch, { pomodoro: { ...cfg, ...patch } })
@@ -123,7 +135,7 @@ export function PomodoroControl() {
         <>
           <button className="status-item" title="Timer options" onClick={() => setOpen(o => !o)}>
             <span className={`pomo-dot ${state.phase === 'work' ? '' : 'break'}`} />
-            <span className="pomo-time" data-testid="pomodoro-time">{fmt(c.remainingMs)}</span>
+            <span className="pomo-time" data-testid="pomodoro-time">{fmt(remainingMs)}</span>
           </button>
           <button className="status-item" data-testid="pomodoro-toggle" title={state.running ? 'Pause' : 'Resume'} onClick={c.toggle}>
             {state.running ? <Pause size={13} /> : <Play size={13} />}

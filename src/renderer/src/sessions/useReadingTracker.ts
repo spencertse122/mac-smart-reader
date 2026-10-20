@@ -25,12 +25,17 @@ export function useReadingTracker(): void {
       onReader('activity', ({ bookId }) => t.activity(bookId, Date.now(), latest.current.phase === 'work' && latest.current.running)),
       onReader('closed', end)
     ]
-    window.addEventListener('blur', end)
+    // Focus moving into a same-origin reader iframe blurs the top window while the app keeps focus.
+    const onBlur = (): void => { setTimeout(() => { if (!document.hasFocus()) end() }, 0) }
+    const onVisibility = (): void => { if (document.visibilityState === 'hidden') end() }
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('beforeunload', end)
     const timer = setInterval(() => t.tick(Date.now()), 15_000)
     return () => {
       offs.forEach(off => off())
-      window.removeEventListener('blur', end)
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('beforeunload', end)
       clearInterval(timer)
     }
