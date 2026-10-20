@@ -236,7 +236,7 @@ The skills are bundled as templates and installed by `WorkspaceSetup` into `.cla
 - **Development on the Linux VPS:** `npm run dev`, `npm test` (Vitest) and `npm run e2e` (Playwright `_electron` under xvfb).
 - **GitHub Actions:**
   - `ci.yml` runs on push: lint, typecheck and unit tests on ubuntu, and e2e on ubuntu with xvfb.
-  - `release.yml` runs on a `v*` tag: on a macOS arm64 runner (`macos-latest`) it runs `electron-builder --mac dmg --arm64 --x64` unsigned (`identity: null`), which rebuilds node-pty for each architecture. It smoke-launches the arm64 app and uploads `Smart-Reader-<ver>-arm64.dmg` and `-x64.dmg` to a GitHub Release.
+  - `release.yml` runs on a `v*` tag: on a macOS arm64 runner (`macos-latest`) it runs `electron-builder --mac dmg --arm64 --x64` with an ad-hoc signature (`identity: '-'`, no Apple account) using node-pty's per-arch N-API prebuilds. It verifies both bundles with `codesign --verify --deep --strict`, checks the x64 binaries with `lipo`, smoke-launches the arm64 app and the x64 app (under Rosetta), and uploads `Smart-Reader-<ver>-arm64.dmg` and `-x64.dmg` to a GitHub Release.
 - **`install.sh`:**
   - Detects the architecture and downloads `*-<arch>.dmg` from the latest release of `spencertse122/mac-smart-reader`: with `gh release download` when `gh` is installed and logged in, otherwise with `curl` via the public GitHub releases API. If both fail (for example, the repo was made private), it says to run `brew install gh && gh auth login`.
   - Install one-liner: `curl -fsSL https://raw.githubusercontent.com/spencertse122/mac-smart-reader/main/install.sh | bash` (for a private repo: `gh api repos/spencertse122/mac-smart-reader/contents/install.sh --jq .content | base64 -d | bash`).
