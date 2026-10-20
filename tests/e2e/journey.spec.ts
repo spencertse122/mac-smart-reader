@@ -17,6 +17,19 @@ async function contentFrame(page: Page): Promise<Frame> {
   throw new Error('no content frame')
 }
 
+async function selectSomeText(frame: Frame): Promise<void> {
+  await frame.evaluate(() => {
+    const p = [...document.querySelectorAll('p')].find(x => x.firstChild?.nodeType === Node.TEXT_NODE && (x.firstChild as Text).data.trim().split(/\s+/).length > 8)!
+    const t = p.firstChild as Text
+    const r = document.createRange()
+    r.setStart(t, 0)
+    r.setEnd(t, Math.min(30, t.data.length))
+    document.getSelection()!.removeAllRanges()
+    document.getSelection()!.addRange(r)
+    p.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+  })
+}
+
 test('first run → read → highlight → agent adds question → review → stats', async () => {
   const library = await makeLibrary()
   const { app, page } = await launchApp({ library })
@@ -30,16 +43,7 @@ test('first run → read → highlight → agent adds question → review → st
   await expect(page.getByTestId('book-tile').filter({ hasText: 'The Art of War' }).first()).toBeVisible({ timeout: 30_000 })
   await page.getByTestId('book-tile').filter({ hasText: 'The Art of War' }).first().click()
   const frame = await contentFrame(page)
-  await frame.evaluate(() => {
-    const p = [...document.querySelectorAll('p')].find(x => x.firstChild?.nodeType === Node.TEXT_NODE && (x.firstChild as Text).data.trim().split(/\s+/).length > 8)!
-    const t = p.firstChild as Text
-    const r = document.createRange()
-    r.setStart(t, 0)
-    r.setEnd(t, Math.min(30, t.data.length))
-    document.getSelection()!.removeAllRanges()
-    document.getSelection()!.addRange(r)
-    p.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
-  })
+  await selectSomeText(frame)
   await expect(page.getByTestId('hl-popup')).toBeVisible()
   await page.getByTestId('hl-color-yellow').click()
   await expect(page.getByTestId('due-badge')).toHaveText('1')
@@ -66,5 +70,42 @@ test('first run → read → highlight → agent adds question → review → st
   // stats
   await page.getByTestId('nav-stats').click()
   await expect(page.getByTestId('kpi-rate')).toBeVisible()
+  await app.close()
+})
+
+// Regression: a book whose cover dir already existed when the library opened used to save its first highlight with bookId ''.
+test('restart → highlight a book whose cover was extracted last session → it becomes a review card', async () => {
+  const library = await makeLibrary()
+  type B = { id: string; slug: string; metadataExtracted: boolean; hasCover: boolean; status: string }
+  const books = async (): Promise<B[]> => {
+    try {
+      return Object.values(JSON.parse(await readFile(join(library, '.smartreader/library.json'), 'utf8')).books as Record<string, B>)
+    } catch {
+      return []
+    }
+  }
+  const first = await launchApp({ library })
+  await expect.poll(async () => {
+    const bs = (await books()).filter(b => b.status === 'ok')
+    return bs.length > 0 && bs.every(b => b.metadataExtracted) && bs.some(b => b.hasCover)
+  }, { timeout: 30_000 }).toBe(true)
+  await first.app.close()
+  for (const b of await books()) expect(existsSync(join(library, `.smartreader/books/${b.slug}/highlights.json`))).toBe(false)
+
+  const { app, page } = await launchApp({ library })
+  await expect(page.getByTestId('book-tile').filter({ hasText: 'The Art of War' }).first()).toBeVisible({ timeout: 30_000 })
+  await page.getByTestId('book-tile').filter({ hasText: 'The Art of War' }).first().click()
+  await selectSomeText(await contentFrame(page))
+  await expect(page.getByTestId('hl-popup')).toBeVisible()
+  await page.getByTestId('hl-color-yellow').click()
+  await expect(page.getByTestId('due-badge')).toHaveText('1')
+  const book = (await books()).find(b => existsSync(join(library, `.smartreader/books/${b.slug}/highlights.json`)))!
+  expect(existsSync(join(library, `.smartreader/books/${book.slug}/cover.jpg`))).toBe(true)
+  const file = JSON.parse(await readFile(join(library, `.smartreader/books/${book.slug}/highlights.json`), 'utf8'))
+  expect(file.bookId).toBe(book.id)
+  expect(file.highlights).toHaveLength(1)
+  expect(existsSync(join(library, `.smartreader/books/${book.slug}/highlights.md`))).toBe(true)
+  await page.getByTestId('nav-review').click()
+  await expect(page.getByTestId('review-prompt')).toBeVisible()
   await app.close()
 })

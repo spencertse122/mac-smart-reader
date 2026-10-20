@@ -3,7 +3,7 @@ import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { HIGHLIGHT_COLORS, LIMITS, type Highlight, type HighlightPatch, type HighlightsFile, type NewHighlight } from '../../shared/types'
 import { jsonFile, type JsonFile } from '../store/jsonFile'
-import { writeFileAtomic } from '../store/atomic'
+import { readJson, writeFileAtomic } from '../store/atomic'
 import { renderHighlightsMarkdown } from './markdown'
 
 export interface BookRef { bookId: string; slug: string; title: string; author: string }
@@ -39,6 +39,15 @@ export class HighlightStore {
     return this.fileAt(join(this.dataDir, 'books', ref.slug), bookId)
   }
 
+  // The caller's bookId is authoritative: it also repairs files saved with an empty bookId by an earlier bug.
+  private async mutate(bookId: string, fn: (d: HighlightsFile) => void): Promise<void> {
+    const f = await this.fileFor(bookId)
+    await f.update(d => {
+      fn(d)
+      if (!d.bookId) d.bookId = bookId
+    })
+  }
+
   async list(bookId: string): Promise<Highlight[]> {
     const f = await this.fileFor(bookId)
     return (await f.read()).highlights.filter(h => !h.deleted).sort((a, b) => a.position - b.position)
@@ -67,8 +76,7 @@ export class HighlightStore {
       updatedAt: ts,
       deleted: false
     }
-    const f = await this.fileFor(bookId)
-    await f.update(d => {
+    await this.mutate(bookId, d => {
       d.highlights.push(h)
     })
     // the cached copy is mutated by later updates, so hand back a snapshot
@@ -77,9 +85,8 @@ export class HighlightStore {
 
   async update(bookId: string, id: string, patch: HighlightPatch): Promise<Highlight> {
     if (patch.color && !HIGHLIGHT_COLORS.includes(patch.color)) throw new HighlightError(`Unknown color: ${patch.color}`)
-    const f = await this.fileFor(bookId)
     let result: Highlight | undefined
-    await f.update(d => {
+    await this.mutate(bookId, d => {
       const h = d.highlights.find(x => x.id === id && !x.deleted)
       if (!h) throw new HighlightError(`Highlight not found: ${id}`)
       if (patch.color) h.color = patch.color
@@ -92,8 +99,7 @@ export class HighlightStore {
   }
 
   async remove(bookId: string, id: string): Promise<void> {
-    const f = await this.fileFor(bookId)
-    await f.update(d => {
+    await this.mutate(bookId, d => {
       const h = d.highlights.find(x => x.id === id)
       if (!h) throw new HighlightError(`Highlight not found: ${id}`)
       h.deleted = true
@@ -111,8 +117,11 @@ export class HighlightStore {
     }
     const out: Array<{ bookId: string; highlights: Highlight[] }> = []
     for (const name of dirs) {
-      const f = this.fileAt(join(booksDir, name), '')
-      const v = await f.read()
+      // Never create a cached JsonFile here: without a caller bookId its fallback would be { bookId: '' }.
+      const path = join(booksDir, name, 'highlights.json')
+      const cached = this.files.get(path)
+      const v = cached ? await cached.read() : await readJson<HighlightsFile | null>(path, () => null)
+      if (!v) continue
       if (v.bookId && v.highlights.length) out.push({ bookId: v.bookId, highlights: v.highlights })
     }
     return out

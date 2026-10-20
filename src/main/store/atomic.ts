@@ -12,7 +12,8 @@ function isNotFound(e: unknown): boolean {
   return (e as NodeJS.ErrnoException).code === 'ENOENT'
 }
 
-export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
+// `backup: false` skips the .bak copy, for files the app can regenerate (e.g. workspace templates).
+export async function writeFileAtomic(path: string, data: string | Uint8Array, opts: { backup?: boolean } = {}): Promise<void> {
   await fs.mkdir(dirname(path), { recursive: true })
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const fh = await fs.open(tmp, 'w')
@@ -22,10 +23,12 @@ export async function writeFileAtomic(path: string, data: string | Uint8Array): 
   } finally {
     await fh.close()
   }
-  try {
-    await fs.copyFile(path, `${path}.bak`)
-  } catch (e) {
-    if (!isNotFound(e)) throw e
+  if (opts.backup !== false) {
+    try {
+      await fs.copyFile(path, `${path}.bak`)
+    } catch (e) {
+      if (!isNotFound(e)) throw e
+    }
   }
   await fs.rename(tmp, path)
 }

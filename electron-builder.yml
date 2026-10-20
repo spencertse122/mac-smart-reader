@@ -20,12 +20,17 @@ asarUnpack:
   - node_modules/node-pty/**
 # No rebuild: avoids cross-compiling node-pty for x64 on an arm64 runner.
 npmRebuild: false
+# Makes node-pty's spawn-helper executable inside the bundle (the npm tarball ships it 0644).
+afterPack: scripts/after-pack.cjs
 mac:
   target:
     - target: dmg
   category: public.app-category.education
   icon: build/icon.png
-  identity: null
+  # Ad-hoc signature ('-'): free, no Apple account; gives the whole modified bundle one consistent
+  # signature (Apple Silicon refuses invalid ones). Hardened runtime stays off: with an ad-hoc identity
+  # it would reject Electron's frameworks via library validation.
+  identity: '-'
   hardenedRuntime: false
   minimumSystemVersion: '13.0'
   artifactName: Smart-Reader-${version}-${arch}.${ext}

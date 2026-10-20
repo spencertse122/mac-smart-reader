@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { IPC } from '../shared/ipc'
 import { SettingsStore } from './settings'
 import { PtyService } from './pty/ptyService'
-import { registerIpc } from './ipc'
+import { registerIpc, type IpcHandle } from './ipc'
 import { buildMenu } from './menu'
 import { setRecoveryListener } from './store/atomic'
 
@@ -14,9 +14,19 @@ protocol.registerSchemesAsPrivileged([
 if (process.env.SR_USER_DATA) app.setPath('userData', process.env.SR_USER_DATA)
 
 const RENDERER_DIR = join(__dirname, '../renderer')
+const APP_URL = process.env.ELECTRON_RENDERER_URL ?? 'app://bundle/index.html'
+
+// Only the app's own pages may load in the window: a dropped file or a stray link would otherwise
+// replace the UI, and a dropped .html would run with the preload's window.api.
+function isAppUrl(url: string): boolean {
+  if (url.startsWith('app://bundle/')) return true
+  const dev = process.env.ELECTRON_RENDERER_URL
+  return !!dev && url.startsWith(new URL('/', dev).href)
+}
 const CSP = [
   "default-src 'self' app: blob: data:",
-  "script-src 'self' app: blob:",
+  // no blob: here: foliate turns an EPUB's <script src> into a blob: URL in a same-origin iframe
+  "script-src 'self' app:",
   "style-src 'self' 'unsafe-inline' app: blob:",
   "img-src 'self' app: blob: data:",
   "font-src 'self' app: blob: data:",
@@ -62,7 +72,12 @@ export function createMainWindow(): BrowserWindow {
     if (/^https?:/.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  void win.loadURL(process.env.ELECTRON_RENDERER_URL ?? 'app://bundle/index.html')
+  win.webContents.on('will-navigate', (e, url) => {
+    if (isAppUrl(url)) return
+    e.preventDefault()
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+  })
+  void win.loadURL(APP_URL)
   return win
 }
 
@@ -72,19 +87,22 @@ function templateDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'workspace-template') : join(app.getAppPath(), 'resources', 'workspace-template')
 }
 
+let ipcHandle: IpcHandle | null = null
+let draining = false
+
 async function bootstrap(): Promise<void> {
   registerAppProtocol()
   const send = (channel: string, ...args: unknown[]): void => mainWindow?.webContents.send(channel, ...args)
   const settings = new SettingsStore(app.getPath('userData'))
   const pty = new PtyService(send)
   const setMenu = (recent: string[]): void => Menu.setApplicationMenu(buildMenu(a => send(IPC.eventMenu, a), recent))
-  const ipc = registerIpc({
+  const ipc = (ipcHandle = registerIpc({
     getWindow: () => mainWindow,
     settings,
     templateDir: templateDir(),
     pty,
     onSettingsChanged: s => setMenu(s.recentLibraries)
-  })
+  }))
   setRecoveryListener(e =>
     send(IPC.eventToast, {
       kind: 'warning',
@@ -95,12 +113,37 @@ async function bootstrap(): Promise<void> {
   )
   setMenu((await settings.get()).recentLibraries)
   mainWindow = createMainWindow()
+  const wc = mainWindow.webContents
+  const releasePtys = (): void => pty.killOwnedBy(wc.id)
+  // did-navigate fires when a main-frame navigation (e.g. ⌘R) commits, never for one will-navigate blocked
+  wc.on('did-navigate', releasePtys)
+  wc.on('render-process-gone', releasePtys)
+  wc.on('destroyed', releasePtys)
   mainWindow.on('closed', () => {
     ipc.closeAll()
     mainWindow = null
   })
 }
 
-app.whenReady().then(bootstrap)
+// One instance per data dir (the lock lives in userData, set above): two writers would race on .smartreader/.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+  app.whenReady().then(bootstrap)
+}
 
 app.on('window-all-closed', () => app.quit())
+
+// Let writes the closing window just requested (its last reading position) finish before exiting.
+app.on('will-quit', e => {
+  if (draining || !ipcHandle?.busy()) return
+  e.preventDefault()
+  draining = true
+  void ipcHandle.drain().finally(() => app.quit())
+})

@@ -15,7 +15,14 @@ export interface IpcContext {
   onSettingsChanged: (s: Settings) => void
 }
 
-export function registerIpc(ctx: IpcContext): { current(): Workspace | null; closeAll(): void } {
+export interface IpcHandle {
+  current(): Workspace | null
+  closeAll(): void
+  busy(): boolean
+  drain(): Promise<void>
+}
+
+export function registerIpc(ctx: IpcContext): IpcHandle {
   let ws: Workspace | null = null
   const send = (channel: string, ...args: unknown[]): void => ctx.getWindow()?.webContents.send(channel, ...args)
   const need = (): Workspace => {
@@ -23,8 +30,15 @@ export function registerIpc(ctx: IpcContext): { current(): Workspace | null; clo
     return ws
   }
   const reviewChanged = (): void => send(IPC.eventReviewChanged)
+  // Calls still running (e.g. the reader's last saveProgress sent while the window closes); quit waits for them.
+  const inflight = new Set<Promise<unknown>>()
   const handle = (channel: string, fn: (...args: any[]) => unknown): void => {
-    ipcMain.handle(channel, (_e, ...args) => fn(...args))
+    ipcMain.handle(channel, (_e, ...args) => {
+      const p = Promise.resolve().then(() => fn(...args))
+      inflight.add(p)
+      void p.catch(() => undefined).finally(() => inflight.delete(p))
+      return p
+    })
   }
 
   handle(IPC.settingsGet, () => ctx.settings.get())
@@ -102,7 +116,7 @@ export function registerIpc(ctx: IpcContext): { current(): Workspace | null; clo
   })
   handle(IPC.statsGet, () => need().stats.get())
 
-  handle(IPC.ptyCreate, (cols: number, rows: number) => ctx.pty.create(ws?.root ?? homedir(), cols, rows))
+  ipcMain.handle(IPC.ptyCreate, (e, cols: number, rows: number) => ctx.pty.create(ws?.root ?? homedir(), cols, rows, e.sender.id))
   ipcMain.on(IPC.ptyWrite, (_e, id: string, data: string) => ctx.pty.write(id, data))
   ipcMain.on(IPC.ptyResize, (_e, id: string, cols: number, rows: number) => ctx.pty.resize(id, cols, rows))
   ipcMain.on(IPC.ptyKill, (_e, id: string) => ctx.pty.kill(id))
@@ -112,6 +126,10 @@ export function registerIpc(ctx: IpcContext): { current(): Workspace | null; clo
     closeAll: () => {
       ws?.close()
       ctx.pty.killAll()
+    },
+    busy: () => inflight.size > 0,
+    drain: async () => {
+      while (inflight.size) await Promise.allSettled([...inflight])
     }
   }
 }

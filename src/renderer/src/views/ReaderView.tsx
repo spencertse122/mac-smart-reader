@@ -3,7 +3,7 @@ import type { Highlight, HighlightColor, Settings } from '../../../shared/types'
 import { LIMITS } from '../../../shared/types'
 import { useAppState } from '../state/appState'
 import { refreshBooks, toast } from '../state/actions'
-import { bookFile, loadFoliateView, loadOverlayer, type FoliateOverlayer, type FoliateTocItem } from '../reader/foliate'
+import { bookFile, loadFoliateView, loadOverlayer, makeBook, neuterBookScripts, type FoliateBook, type FoliateOverlayer, type FoliateTocItem } from '../reader/foliate'
 import { emitReader, onReader } from '../reader/bus'
 import { HIGHLIGHT_FILL, readerCss } from '../reader/readerStyles'
 import { contextFromRange, quoteFromRange } from '../reader/selection'
@@ -15,7 +15,7 @@ import { TocDrawer } from '../reader/TocDrawer'
 import '../reader/reader.css'
 
 type FoliateView = HTMLElement & {
-  open(f: File): Promise<void>
+  open(b: File | FoliateBook): Promise<void>
   init(o: { lastLocation?: string; showTextStart?: boolean }): Promise<void>
   goTo(t: string | number): Promise<unknown>
   goLeft(): Promise<void>
@@ -97,6 +97,10 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   const overlays = useRef({ popup: false, toc: false, menu: false })
   overlays.current = { popup: popup !== null, toc: tocOpen, menu: menuOpen }
   const lastColor = useRef<HighlightColor>('yellow')
+  // The popup's note text as typed, so a click back into the book can save it instead of dropping it.
+  const popupRef = useRef<PopupState | null>(null)
+  popupRef.current = popup
+  const noteDraft = useRef('')
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const showChrome = useCallback((): void => {
@@ -376,6 +380,17 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       })
     }
 
+    // A click in the book closes the popup, but a typed note is saved, not lost: a new selection
+    // becomes a highlight in the last used color, an existing highlight gets the edited note.
+    const dismissPopup = (): void => {
+      const p = popupRef.current
+      const draft = noteDraft.current.trim()
+      noteDraft.current = ''
+      const saved = p?.mode === 'edit' ? (p.highlight.note ?? '') : ''
+      if (p && draft && draft !== saved) p.onNote(draft)
+      else setPopup(null)
+    }
+
     // 5. Per-section listeners on the iframe document.
     const onLoad = (e: Event): void => {
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail
@@ -387,7 +402,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       })
       doc.addEventListener('pointerdown', () => {
         activity(true)
-        setPopup(null)
+        dismissPopup()
       })
       doc.addEventListener('pointerup', () => {
         activity(true)
@@ -528,7 +543,10 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       viewRef.current = view
 
       try {
-        await view.open(file)
+        const book = await makeBook(file)
+        neuterBookScripts(book)
+        if (disposed) return
+        await view.open(book)
       } catch (err) {
         if (disposed) return
         const e = err as Error
@@ -580,6 +598,12 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     window.addEventListener('wheel', winWheel, { passive: true })
     cleanups.push(() => window.removeEventListener('keydown', winKey))
     cleanups.push(() => window.removeEventListener('wheel', winWheel))
+    // ⌘Q/⌘W close the window without unmounting React, so flush the debounced position here too.
+    const onUnload = (): void => void flushSave()
+    window.addEventListener('pagehide', onUnload)
+    window.addEventListener('beforeunload', onUnload)
+    cleanups.push(() => window.removeEventListener('pagehide', onUnload))
+    cleanups.push(() => window.removeEventListener('beforeunload', onUnload))
 
     // 13. Navigation requests from the highlights panel, review, etc.
     cleanups.push(onReader('goto', ({ target }) => {
@@ -658,7 +682,16 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
           onClose={() => setTocOpen(false)}
         />
       )}
-      {popup && <HighlightPopup key={`${popup.mode}-${popup.rect.x}-${popup.rect.y}`} state={popup} onClose={() => setPopup(null)} />}
+      {popup && (
+        <HighlightPopup
+          key={`${popup.mode}-${popup.rect.x}-${popup.rect.y}`}
+          state={popup}
+          onClose={() => setPopup(null)}
+          onDraft={d => {
+            noteDraft.current = d
+          }}
+        />
+      )}
     </div>
   )
 }

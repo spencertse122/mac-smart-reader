@@ -58,7 +58,7 @@ export async function setupWorkspace(root: string, templateDir: string): Promise
     const destAbs = join(root, dest)
     const current = await readMaybe(destAbs)
     if (current === null) {
-      await writeFileAtomic(destAbs, template)
+      await writeFileAtomic(destAbs, template, { backup: false })
       if (!createOnly) manifest.files[dest] = tHash
       result.created.push(dest)
       continue
@@ -72,7 +72,7 @@ export async function setupWorkspace(root: string, templateDir: string): Promise
       manifest.files[dest] = tHash
       result.skipped.push(dest)
     } else if (manifest.files[dest] === cHash) {
-      await writeFileAtomic(destAbs, template)
+      await writeFileAtomic(destAbs, template, { backup: false })
       manifest.files[dest] = tHash
       result.updated.push(dest)
     } else {

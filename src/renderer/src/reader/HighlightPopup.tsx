@@ -15,11 +15,13 @@ export type PopupState =
 const GAP = 10
 const EDGE = 12
 
-export function HighlightPopup({ state, onClose }: { state: PopupState; onClose(): void }) {
+export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState; onClose(): void; onDraft?(note: string): void }) {
   const ref = useRef<HTMLDivElement>(null)
   const editNote = state.mode === 'edit' ? state.highlight.note ?? '' : ''
   const [noteOpen, setNoteOpen] = useState(editNote !== '')
   const [note, setNote] = useState(editNote)
+  // Each popup is keyed, so this runs once per popup: the draft starts as the saved note.
+  useLayoutEffect(() => onDraft?.(editNote), [])
   const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null)
   const current = state.mode === 'edit' ? state.highlight.color : null
 
@@ -96,7 +98,10 @@ export function HighlightPopup({ state, onClose }: { state: PopupState; onClose(
           <textarea
             autoFocus
             value={note}
-            onChange={e => setNote(e.target.value)}
+            onChange={e => {
+              setNote(e.target.value)
+              onDraft?.(e.target.value)
+            }}
             onKeyDown={onKey}
             placeholder="Add a note…"
             rows={3}

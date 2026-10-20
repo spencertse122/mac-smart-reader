@@ -73,6 +73,15 @@ describe('scanFolder', () => {
     await put('.claude/e.epub', 'x')
     expect(await scanFolder(root)).toEqual(['a.epub', 'sub/deeper/b.pdf'])
   })
+
+  it('skips macOS system folders when the chosen folder is the home directory', async () => {
+    for (const d of ['Library', 'Applications', 'Pictures', 'Music', 'Movies']) await put(`${d}/x.epub`, 'x')
+    await put('Documents/Books/a.epub', 'x')
+    await put('sub/Library/b.epub', 'x') // only the home's own top-level folders are skipped
+    expect(await scanFolder(root, root)).toEqual(['Documents/Books/a.epub', 'sub/Library/b.epub'])
+    // any other folder is scanned in full
+    expect(await scanFolder(root, '/somewhere/else')).toContain('Library/x.epub')
+  })
 })
 
 describe('LibraryService', () => {

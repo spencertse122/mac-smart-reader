@@ -7,16 +7,23 @@ Smart Reader is a local ebook reader for Mac, built for non-fiction. Read EPUBs 
 Requires macOS 13 or later.
 
 ```bash
-brew install gh        # if you don't have it
-gh auth login          # once; the repo is private
-gh api repos/afreeelfdobby934-sys/mac-smart-reader/contents/install.sh --jq .content | base64 -d | bash
+curl -fsSL https://raw.githubusercontent.com/spencertse122/mac-smart-reader/main/install.sh | bash
+```
+
+The installer uses the GitHub CLI (`gh`) when it is installed and logged in, and plain `curl` otherwise.
+
+If the repository is ever made private, the command above stops working. Log in with the GitHub CLI first and fetch the installer through it:
+
+```bash
+brew install gh && gh auth login     # once
+gh api repos/spencertse122/mac-smart-reader/contents/install.sh --jq .content | base64 -d | bash
 ```
 
 Running the same command again updates the app to the latest release.
 
 The app is not signed with a paid Apple Developer ID, so macOS would normally refuse to open it. The installer clears the quarantine flag (`xattr -dr com.apple.quarantine`) on the installed app so it opens normally.
 
-**Manual install:** download the DMG for your Mac (`arm64` for Apple Silicon, `x64` for Intel) from the Releases page, drag Smart Reader to Applications, then run:
+**Manual install:** download the DMG for your Mac (`arm64` for Apple Silicon, `x64` for Intel) from the [Releases page](https://github.com/spencertse122/mac-smart-reader/releases), drag Smart Reader to Applications, then run:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Smart Reader.app"

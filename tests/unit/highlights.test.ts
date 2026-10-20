@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { HighlightStore, type BookRef } from '../../src/main/highlights/highlightStore'
@@ -14,6 +14,11 @@ const books: Record<string, BookRef> = {
 }
 let tick = 0
 const now = () => new Date(Date.UTC(2026, 9, 20, 10, 0, tick++))
+// mirrors Workspace.resolveBook, which throws BookNotFoundError for unknown ids
+const resolve = async (id: string): Promise<BookRef> => {
+  if (!books[id]) throw new Error(`Book not found: ${id}`)
+  return books[id]
+}
 
 const nh = (over: Partial<NewHighlight> = {}): NewHighlight => ({
   location: 'epubcfi(/6/4!/4/2,/1:0,/1:10)',
@@ -28,7 +33,7 @@ const nh = (over: Partial<NewHighlight> = {}): NewHighlight => ({
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'sr-hl-'))
-  store = new HighlightStore(dataDir, async id => books[id], now)
+  store = new HighlightStore(dataDir, resolve, now)
 })
 
 describe('HighlightStore', () => {
@@ -100,6 +105,34 @@ describe('HighlightStore', () => {
   it('concurrent adds are all kept', async () => {
     await Promise.all(Array.from({ length: 10 }, (_, i) => store.add('b1', nh({ position: i / 10 }))))
     expect(await store.list('b1')).toHaveLength(10)
+  })
+
+  it('first highlight after listAllBooks saw a cover-only book dir keeps the right bookId', async () => {
+    // a book with a cover has its data dir before it has highlights.json
+    await mkdir(join(dataDir, 'books/deep-work-b1b1b1'), { recursive: true })
+    await writeFile(join(dataDir, 'books/deep-work-b1b1b1/cover.jpg'), 'jpg')
+    expect(await store.listAllBooks()).toEqual([])
+    const h = await store.add('b1', nh())
+    const file = JSON.parse(await readFile(join(dataDir, 'books/deep-work-b1b1b1/highlights.json'), 'utf8'))
+    expect(file.bookId).toBe('b1')
+    expect((await store.listAllBooks()).map(x => x.bookId)).toEqual(['b1'])
+    expect((await store.list('b1')).map(x => x.id)).toEqual([h.id])
+  })
+
+  it('repairs a highlights.json stored with an empty bookId on the next write', async () => {
+    const dir = join(dataDir, 'books/deep-work-b1b1b1')
+    await mkdir(dir, { recursive: true })
+    const orphan = { ...(await new HighlightStore(join(dataDir, 'x'), resolve, now).add('b1', nh())), id: 'h_orphan' }
+    await writeFile(join(dir, 'highlights.json'), JSON.stringify({ version: 1, bookId: '', highlights: [orphan] }))
+    const fresh = new HighlightStore(dataDir, resolve, now)
+    expect(await fresh.listAllBooks()).toEqual([])
+    await fresh.add('b1', nh())
+    const file = JSON.parse(await readFile(join(dir, 'highlights.json'), 'utf8'))
+    expect(file.bookId).toBe('b1')
+    expect(file.highlights).toHaveLength(2)
+    const all = await fresh.listAllBooks()
+    expect(all.map(x => x.bookId)).toEqual(['b1'])
+    expect(all[0].highlights.map(x => x.id)).toContain('h_orphan')
   })
 })
 
