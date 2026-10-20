@@ -103,7 +103,7 @@ export function ReviewView() {
           <circle cx="12" cy="12" r="10" /><path d="m8 12.5 3 3 5-6" />
         </svg>
         <h2>You're all caught up</h2>
-        <div className="muted">Highlight or jot a note while reading — each one comes back here.</div>
+        <div className="muted">Highlight, jot a note or look up a word while reading — each one comes back here.</div>
       </div>
     )
   } else if (s.phase === 'done') {

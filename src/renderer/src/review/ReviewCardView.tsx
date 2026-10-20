@@ -46,7 +46,7 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
 
       {!revealed ? (
         <div className="review-footer">
-          <div className="muted">Think of the answer, then press <b>Space</b></div>
+          <div className="muted">{word ? <>What does it mean? Say it to yourself, then press <b>Space</b></> : <>Think of the answer, then press <b>Space</b></>}</div>
           <button className="btn btn-primary" data-testid="review-reveal" onClick={onReveal}>Show Answer</button>
         </div>
       ) : (
