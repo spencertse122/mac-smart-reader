@@ -110,6 +110,12 @@ async function bootstrap(): Promise<void> {
   )
   setMenu((await settings.get()).recentLibraries)
   mainWindow = createMainWindow()
+  const wc = mainWindow.webContents
+  const releasePtys = (): void => pty.killOwnedBy(wc.id)
+  // did-navigate fires when a main-frame navigation (e.g. ⌘R) commits, never for one will-navigate blocked
+  wc.on('did-navigate', releasePtys)
+  wc.on('render-process-gone', releasePtys)
+  wc.on('destroyed', releasePtys)
   mainWindow.on('closed', () => {
     ipc.closeAll()
     mainWindow = null

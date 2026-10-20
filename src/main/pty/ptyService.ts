@@ -1,13 +1,15 @@
 import { spawn, type IPty } from 'node-pty'
 import { IPC } from '../../shared/ipc'
+import { ptyEnv } from './env'
 
 export class PtyService {
   private ptys = new Map<string, IPty>()
+  private owners = new Map<string, number>() // pty id → webContents id that created it
   private seq = 0
 
   constructor(private send: (channel: string, ...args: unknown[]) => void) {}
 
-  create(cwd: string, cols: number, rows: number): string {
+  create(cwd: string, cols: number, rows: number, owner = 0): string {
     const id = `pty${++this.seq}`
     const shell = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash')
     // A login shell (-l) loads the user's profile so PATH includes claude/codex/gemini when launched from Finder.
@@ -16,14 +18,16 @@ export class PtyService {
       cols: Math.max(2, cols),
       rows: Math.max(2, rows),
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'SmartReader' } as Record<string, string>
+      env: ptyEnv(process.env)
     })
     p.onData(data => this.send(IPC.ptyData, id, data))
     p.onExit(({ exitCode }) => {
       this.ptys.delete(id)
+      this.owners.delete(id)
       this.send(IPC.ptyExit, id, exitCode)
     })
     this.ptys.set(id, p)
+    this.owners.set(id, owner)
     return id
   }
 
@@ -42,6 +46,12 @@ export class PtyService {
   kill(id: string): void {
     this.ptys.get(id)?.kill()
     this.ptys.delete(id)
+    this.owners.delete(id)
+  }
+
+  // A reloaded or crashed page has lost its terminals' UI; don't leave their shells running unseen.
+  killOwnedBy(owner: number): void {
+    for (const [id, o] of [...this.owners]) if (o === owner) this.kill(id)
   }
 
   killAll(): void {

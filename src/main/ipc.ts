@@ -102,7 +102,7 @@ export function registerIpc(ctx: IpcContext): { current(): Workspace | null; clo
   })
   handle(IPC.statsGet, () => need().stats.get())
 
-  handle(IPC.ptyCreate, (cols: number, rows: number) => ctx.pty.create(ws?.root ?? homedir(), cols, rows))
+  ipcMain.handle(IPC.ptyCreate, (e, cols: number, rows: number) => ctx.pty.create(ws?.root ?? homedir(), cols, rows, e.sender.id))
   ipcMain.on(IPC.ptyWrite, (_e, id: string, data: string) => ctx.pty.write(id, data))
   ipcMain.on(IPC.ptyResize, (_e, id: string, cols: number, rows: number) => ctx.pty.resize(id, cols, rows))
   ipcMain.on(IPC.ptyKill, (_e, id: string) => ctx.pty.kill(id))
