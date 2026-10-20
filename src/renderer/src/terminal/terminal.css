@@ -1,0 +1,18 @@
+.terminal-panel { position: relative; display: flex; flex-direction: column; flex: none; border-top: 1px solid var(--separator); background: var(--bg-2); min-width: 0; min-height: 0; }
+.terminal-panel.pos-right { border-top: none; border-left: 1px solid var(--separator); }
+.terminal-panel.hidden { display: none; }
+.term-resize { position: absolute; z-index: 5; }
+.pos-bottom > .term-resize { top: -3px; left: 0; right: 0; height: 6px; cursor: row-resize; }
+.pos-right > .term-resize { left: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; }
+.term-header { height: 28px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 6px; border-bottom: 1px solid var(--separator); font-size: 12px; }
+.term-tabs, .term-actions { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.term-tab { display: flex; align-items: center; gap: 4px; height: 20px; padding: 0 4px 0 8px; border-radius: 5px; color: var(--text-2); cursor: default; white-space: nowrap; }
+.term-tab:hover { background: var(--hover, rgba(128, 128, 128, 0.15)); }
+.term-tab.active { background: var(--selected, rgba(128, 128, 128, 0.25)); color: var(--text); }
+.term-tab.exited .term-tab-title { opacity: 0.6; }
+.term-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 20px; padding: 0 4px; border: none; background: transparent; color: var(--text-2); border-radius: 4px; cursor: pointer; font: inherit; }
+.term-btn:hover { background: rgba(128, 128, 128, 0.2); color: var(--text); }
+.term-body { flex: 1; min-height: 0; position: relative; }
+.term-pane { position: absolute; inset: 0; padding: 6px 0 0 10px; }
+.term-pane.inactive { display: none; }
+.term-pane .xterm { height: 100%; }
