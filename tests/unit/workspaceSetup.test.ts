@@ -51,6 +51,16 @@ describe('setupWorkspace', () => {
     expect(r.updated).toContain('CLAUDE.md')
   })
 
+  it('template updates leave no .bak files in the books folder', async () => {
+    await setupWorkspace(root, tpl)
+    await put(tpl, 'skills/recall/SKILL.md', 'recall v2')
+    await put(tpl, 'root/CLAUDE.md', 'claude v2')
+    await setupWorkspace(root, tpl)
+    for (const p of ['CLAUDE.md', '.claude/skills/recall/SKILL.md', '.agents/skills/recall/SKILL.md']) {
+      expect(existsSync(join(root, `${p}.bak`)), `${p}.bak`).toBe(false)
+    }
+  })
+
   it('never clobbers user-edited managed files or any knowledge file', async () => {
     await setupWorkspace(root, tpl)
     await writeFile(join(root, 'CLAUDE.md'), 'my own notes')
