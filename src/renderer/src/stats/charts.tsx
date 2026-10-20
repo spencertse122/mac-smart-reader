@@ -65,6 +65,7 @@ export function LineChart({ points, height }: { points: Point[]; height: number 
           <YAxis ticks={ticks} y={y} w={w} />
           {points.length > 0 && <path d={area} fill="var(--accent-soft)" />}
           <path d={line} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          {points.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.value)} r={3} fill="var(--accent)" />)}
           {points.length > 0 && (
             <>
               <text x={PAD.l} y={height - 5} className="chart-label">{points[0].label}</text>

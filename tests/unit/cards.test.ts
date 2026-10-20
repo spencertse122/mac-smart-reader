@@ -23,6 +23,11 @@ it('matches across whitespace differences', () => {
   expect(makeCloze('one  two\nthree four', 'two three')).toBe('one ▁▁▁▁ (~2 words) four')
 })
 
+it('matches case-insensitively', () => {
+  expect(makeCloze('Sun Tzu said: All warfare is based on deception.', 'all warfare is based on deception'))
+    .toBe('Sun Tzu said: ▁▁▁▁ (~6 words).')
+})
+
 it('cloze falls back when quote not in context', () => {
   expect(makeCloze('unrelated context', 'missing words')).toBe('▁▁▁▁ (~2 words)')
 })

@@ -43,7 +43,7 @@ export function StatsView() {
               <Kpi label="Retrievable knowledge per hour" value={formatRate(stats.knowledgePerHour)} sub="last 30 days" testId="kpi-rate" />
               <Kpi label="Retrievable highlights" value={stats.K.toFixed(1)} sub="expected recall today" />
               <Kpi label="Due today" value={String(stats.dueToday)} sub="cards" />
-              <Kpi label="Streak" value={`${stats.streakDays} days`} sub="consecutive days" />
+              <Kpi label="Streak" value={`${stats.streakDays} ${stats.streakDays === 1 ? 'day' : 'days'}`} sub="consecutive days" />
             </div>
             <p className="stats-explainer">
               Retrievable knowledge = how many of your highlights you'd likely recall right now (FSRS). Reading alone doesn't raise it; reviewing does.
