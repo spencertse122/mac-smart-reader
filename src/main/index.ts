@@ -125,7 +125,18 @@ async function bootstrap(): Promise<void> {
   })
 }
 
-app.whenReady().then(bootstrap)
+// One instance per data dir (the lock lives in userData, set above): two writers would race on .smartreader/.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+  app.whenReady().then(bootstrap)
+}
 
 app.on('window-all-closed', () => app.quit())
 
