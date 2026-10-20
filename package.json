@@ -13,7 +13,9 @@
     "test": "vitest run",
     "e2e": "electron-vite build && playwright test",
     "postinstall": "electron-builder install-app-deps",
-    "fixtures:pdf": "node scripts/make-fixture-pdf.mjs tests/fixtures/books/sample.pdf"
+    "fixtures:pdf": "node scripts/make-fixture-pdf.mjs tests/fixtures/books/sample.pdf",
+    "dist:mac": "electron-vite build && electron-builder --mac dmg --arm64 --x64 --publish never",
+    "icon": "node scripts/make-icon.mjs"
   },
   "dependencies": {
     "fflate": "0.8.3",

@@ -1,0 +1,36 @@
+appId: com.smartreader.app
+productName: Smart Reader
+copyright: Copyright © 2026
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  # node-pty is N-API: use its per-arch darwin prebuilds (selected at runtime by process.arch).
+  # Exclude the host-arch build/ dir left by postinstall (the loader prefers it over prebuilds)
+  # and the other platforms' prebuilds.
+  - '!node_modules/node-pty/build/**'
+  - '!node_modules/node-pty/prebuilds/win32-*/**'
+  - '!node_modules/node-pty/{deps,src,third_party,node-addon-api}/**'
+extraResources:
+  - from: resources/workspace-template
+    to: workspace-template
+asarUnpack:
+  - node_modules/node-pty/**
+# No rebuild: avoids cross-compiling node-pty for x64 on an arm64 runner.
+npmRebuild: false
+mac:
+  target:
+    - target: dmg
+  category: public.app-category.education
+  icon: build/icon.png
+  identity: null
+  hardenedRuntime: false
+  minimumSystemVersion: '13.0'
+  artifactName: Smart-Reader-${version}-${arch}.${ext}
+dmg:
+  title: Smart Reader
+  contents:
+    - { x: 140, y: 190 }
+    - { x: 400, y: 190, type: link, path: /Applications }
