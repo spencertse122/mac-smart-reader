@@ -24,7 +24,7 @@ jobs:
       - name: Smoke-launch the packaged arm64 app
         run: |
           APP_BIN="$(ls -d release/mac-arm64/*.app)/Contents/MacOS/Smart Reader"
-          SR_APP_PATH="$APP_BIN" npx playwright test tests/e2e/smoke.spec.ts
+          SR_APP_PATH="$APP_BIN" npx playwright test tests/e2e/smoke.spec.ts tests/e2e/packaged.spec.ts
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

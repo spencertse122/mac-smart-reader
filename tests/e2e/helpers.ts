@@ -12,7 +12,12 @@ export async function makeLibrary(): Promise<string> {
   return dir
 }
 
-export async function launchApp(opts: { library?: string } = {}): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
+// The library opens asynchronously after launch; window.api.library.* fails until the shell is up.
+export async function waitForLibrary(page: Page): Promise<void> {
+  await page.getByTestId('app-shell').waitFor({ state: 'visible', timeout: 30_000 })
+}
+
+export async function launchApp(opts: { library?: string; waitForShell?: boolean } = {}): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
   const userData = await mkdtemp(join(tmpdir(), 'sr-user-'))
   if (opts.library) {
     await mkdir(userData, { recursive: true })
@@ -28,5 +33,6 @@ export async function launchApp(opts: { library?: string } = {}): Promise<{ app:
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
+  if (opts.library && opts.waitForShell !== false) await waitForLibrary(page)
   return { app, page, userData }
 }
