@@ -43,6 +43,8 @@ Your books are never modified or uploaded.
 
 - **Highlight:** select text, then pick a color.
 - **Notes:** press Shift+Command+N (or the Note button) to jot a thought without selecting text. Notes show up in the highlights panel and come back in Review.
+- **Look Up:** select a word (or short phrase) and choose the book icon in the popup to see its definition from the built-in macOS dictionary, offline. The word is saved with the sentence around it.
+- **Vocabulary:** the sidebar's Vocabulary view lists every looked-up word with its definition and the sentences you met it in; click a sentence to jump back to the book. Words come back in Review as word cards: the word first, Space to flip, then Forgot (S) or Got it (Space).
 - **Review:** each highlight or note shows up as you wrote it. Press Space or the right arrow for Next, or S for Sooner (see it again within a day). Cards the AI coach turned into questions reveal the answer on Space first.
 - **Continue Reading:** the first sidebar item (or Command+B) reopens the book you read last, where you left off.
 - **Pomodoro:** Option+Command+P starts or pauses a focus timer.

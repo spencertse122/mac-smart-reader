@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Copy, NotebookPen, Trash2 } from 'lucide-react'
-import { HIGHLIGHT_COLORS, type Highlight, type HighlightColor } from '../../../shared/types'
+import { BookA, Copy, NotebookPen, Trash2 } from 'lucide-react'
+import { HIGHLIGHT_COLORS, type DictEntry, type Highlight, type HighlightColor } from '../../../shared/types'
+import { Emphasized } from '../vocab/Emphasized'
 
 interface Common {
   rect: DOMRect
@@ -8,8 +9,12 @@ interface Common {
   onNote(note: string): void
 }
 
+export type LookUpOutcome =
+  | { ok: true; entry: DictEntry; sentence: string; saved: boolean }
+  | { ok: false; reason: 'not-found' | 'unavailable' }
+
 export type PopupState =
-  | (Common & { mode: 'new'; onCopy(): void })
+  | (Common & { mode: 'new'; onCopy(): void; term: string | null; onLookUp(): Promise<LookUpOutcome> })
   | (Common & { mode: 'edit'; highlight: Highlight; onDelete(): void })
 
 const GAP = 10
@@ -23,6 +28,13 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
   // Each popup is keyed, so this runs once per popup: the draft starts as the saved note.
   useLayoutEffect(() => onDraft?.(editNote), [])
   const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null)
+  const [look, setLook] = useState<'idle' | 'busy' | LookUpOutcome>('idle')
+  const lookTerm = state.mode === 'new' ? state.term : null
+  const runLookUp = (): void => {
+    if (state.mode !== 'new' || look === 'busy') return
+    setLook('busy')
+    state.onLookUp().then(setLook, () => setLook({ ok: false, reason: 'unavailable' }))
+  }
   const current = state.mode === 'edit' ? state.highlight.color : null
 
   // Measure after render so the card can be centered on the selection and kept inside the window.
@@ -38,9 +50,14 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
       ? Math.min(r.bottom + GAP, window.innerHeight - height - EDGE)
       : r.top - height - GAP
     setPos({ left, top, below })
-  }, [state.rect, noteOpen])
+  }, [state.rect, noteOpen, look])
 
   const save = (): void => state.onNote(note.trim())
+  // Keys typed in the popup must never reach page turning.
+  const stopKeys = (e: KeyboardEvent<HTMLDivElement>): void => {
+    e.stopPropagation()
+    if (e.key === 'Escape') onClose()
+  }
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
@@ -60,6 +77,8 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
       role="dialog"
       aria-label={state.mode === 'new' ? 'Highlight selection' : 'Edit highlight'}
       onPointerDown={e => e.stopPropagation()}
+      onKeyDown={stopKeys}
+      onKeyUp={e => e.stopPropagation()}
     >
       <div className="hl-popup-row">
         {HIGHLIGHT_COLORS.map(c => (
@@ -83,6 +102,18 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
         >
           <NotebookPen size={16} />
         </button>
+        {state.mode === 'new' && (
+          <button
+            className={`hl-action ${look !== 'idle' ? 'active' : ''}`}
+            onClick={runLookUp}
+            disabled={!lookTerm}
+            title={lookTerm ? 'Look Up' : 'Select a word or short phrase to look up'}
+            aria-label="Look Up"
+            data-testid="hl-lookup"
+          >
+            <BookA size={16} />
+          </button>
+        )}
         {state.mode === 'new' ? (
           <button className="hl-action" onClick={state.onCopy} title="Copy" aria-label="Copy">
             <Copy size={16} />
@@ -93,6 +124,31 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
           </button>
         )}
       </div>
+      {look !== 'idle' && (
+        <div className="hl-lookup" data-testid="hl-lookup-result">
+          {look === 'busy' ? (
+            <div className="muted">Looking up…</div>
+          ) : look.ok ? (
+            <>
+              <div className="hl-lookup-head">
+                <b data-testid="hl-lookup-headword">{look.entry.headword}</b>
+                {look.entry.pronunciation && <span className="muted">/{look.entry.pronunciation}/</span>}
+              </div>
+              <div className="hl-lookup-def" data-testid="hl-lookup-def">{look.entry.text}</div>
+              {look.sentence && (
+                <div className="hl-lookup-sentence muted">
+                  <Emphasized sentence={look.sentence} terms={[look.entry.headword, lookTerm]} />
+                </div>
+              )}
+              {look.saved && <div className="hl-lookup-saved" data-testid="hl-lookup-saved">Saved to Vocabulary</div>}
+            </>
+          ) : look.reason === 'not-found' ? (
+            <div className="muted" data-testid="hl-lookup-msg">No definition found for “{lookTerm}”.</div>
+          ) : (
+            <div className="muted" data-testid="hl-lookup-msg">Dictionary isn't available. Open the Dictionary app once so macOS downloads it.</div>
+          )}
+        </div>
+      )}
       {noteOpen && (
         <div className="hl-note">
           <textarea

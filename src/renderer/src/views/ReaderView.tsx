@@ -7,6 +7,7 @@ import { bookFile, loadFoliateView, loadOverlayer, makeBook, neuterBookScripts, 
 import { emitReader, onReader } from '../reader/bus'
 import { HIGHLIGHT_FILL, readerCss } from '../reader/readerStyles'
 import { contextFromRange, quoteFromRange } from '../reader/selection'
+import { lookupTerm, sentenceAround } from '../vocab/text'
 import { findQuoteRange } from '../reader/anchor'
 import { drawable } from '../reader/drawable'
 import { NoteComposer } from '../reader/NoteComposer'
@@ -327,6 +328,26 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
         rect: viewportRect(range),
         onColor: c => void createHighlight(doc, index, range, c, null),
         onNote: note => void createHighlight(doc, index, range, lastColor.current, note || null),
+        term: lookupTerm(text),
+        onLookUp: async () => {
+          const term = lookupTerm(text)
+          if (!term) return { ok: false, reason: 'not-found' }
+          const r = await window.api.vocab.lookup(term)
+          if (!r.ok) return r
+          const sentence = sentenceAround(contextFromRange(range, 800), term)
+          try {
+            await window.api.vocab.save({
+              headword: r.entry.headword,
+              pronunciation: r.entry.pronunciation,
+              definition: r.entry.text,
+              context: { bookId, sentence, location: view!.getCFI(index, range), chapter: position.current.chapter || null }
+            })
+            return { ok: true, entry: r.entry, sentence, saved: true }
+          } catch (err) {
+            toast(dispatch, 'error', `Could not save word: ${(err as Error).message}`)
+            return { ok: true, entry: r.entry, sentence, saved: false }
+          }
+        },
         onCopy: () => {
           let ok = false
           try {
