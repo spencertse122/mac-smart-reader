@@ -9,6 +9,7 @@ import { Welcome } from './components/Welcome'
 import { LibraryView } from './views/LibraryView'
 import { ReaderView } from './views/ReaderView'
 import { ReviewView } from './views/ReviewView'
+import { VocabView } from './views/VocabView'
 import { StatsView } from './views/StatsView'
 import { TerminalPanel } from './terminal/TerminalPanel'
 import { PomodoroProvider, usePomodoro } from './pomodoro/PomodoroProvider'
@@ -84,6 +85,7 @@ function Shell() {
           {v.name === 'reader' && <ReaderView key={v.bookId} bookId={v.bookId} target={v.target} />}
           {v.name === 'review' && <ReviewView />}
           {v.name === 'stats' && <StatsView />}
+          {v.name === 'vocab' && <VocabView />}
         </div>
         {state.terminalMounted && <TerminalPanel visible={state.terminalOpen} />}
       </main>

@@ -17,7 +17,7 @@ export async function waitForLibrary(page: Page): Promise<void> {
   await page.getByTestId('app-shell').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
-export async function launchApp(opts: { library?: string; waitForShell?: boolean } = {}): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
+export async function launchApp(opts: { library?: string; waitForShell?: boolean; env?: Record<string, string> } = {}): Promise<{ app: ElectronApplication; page: Page; userData: string }> {
   const userData = await mkdtemp(join(tmpdir(), 'sr-user-'))
   if (opts.library) {
     await mkdir(userData, { recursive: true })
@@ -29,7 +29,7 @@ export async function launchApp(opts: { library?: string; waitForShell?: boolean
   const app = await electron.launch({
     ...(executablePath ? { executablePath } : {}),
     args,
-    env: { ...process.env, SR_USER_DATA: userData, SR_E2E: '1' } as Record<string, string>
+    env: { ...process.env, SR_USER_DATA: userData, SR_E2E: '1', ...opts.env } as Record<string, string>
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')

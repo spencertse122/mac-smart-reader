@@ -1,7 +1,7 @@
 {
   "name": "smart-reader",
   "productName": "Smart Reader",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Local ebook reader for durable learning",
   "author": "spencertse122",
@@ -16,7 +16,7 @@
     "e2e": "electron-vite build && playwright test",
     "postinstall": "electron-builder install-app-deps",
     "fixtures:pdf": "node scripts/make-fixture-pdf.mjs tests/fixtures/books/sample.pdf",
-    "dist:mac": "electron-vite build && electron-builder --mac dmg --arm64 --x64 --publish never",
+    "dist:mac": "bash scripts/build-dict-helper.sh && electron-vite build && electron-builder --mac dmg --arm64 --x64 --publish never",
     "icon": "node scripts/make-icon.mjs"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 import type {
-  Book, BookStatus, Highlight, HighlightPatch, NewHighlight, NewNote, PromptIssues, PromptType,
-  Rating, ReviewCard, ReviewLogEntry, SessionEntry, Settings, Stats, Toast
+  Book, BookStatus, DictLookupResult, Highlight, HighlightPatch, NewHighlight, NewNote, PromptIssues, PromptType,
+  Rating, ReviewCard, ReviewLogEntry, SessionEntry, Settings, Stats, Toast, NewVocab, VocabWord
 } from './types'
 
 export type OpenLibraryResult = { ok: true; root: string; books: Book[] } | { ok: false; error: string }
@@ -37,6 +37,12 @@ export interface SmartReaderApi {
     addNote(bookId: string, n: NewNote): Promise<Highlight>
     update(bookId: string, id: string, patch: HighlightPatch): Promise<Highlight>
     remove(bookId: string, id: string): Promise<void>
+  }
+  vocab: {
+    lookup(term: string): Promise<DictLookupResult> // dictionary only; saves nothing
+    save(input: NewVocab): Promise<VocabWord>
+    list(): Promise<VocabWord[]> // non-deleted, newest first
+    remove(id: string): Promise<void>
   }
   review: {
     queue(): Promise<ReviewCard[]>

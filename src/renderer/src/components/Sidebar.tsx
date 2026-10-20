@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
-import { BarChart3, BookMarked, BookOpen, FolderOpen, Highlighter, Layers } from 'lucide-react'
+import { BarChart3, BookA, BookMarked, BookOpen, FolderOpen, Highlighter, Layers } from 'lucide-react'
 import { useAppState, type SidebarTab } from '../state/appState'
 import { chooseAndOpenLibrary, refreshBooks } from '../state/actions'
 import { latestOpenedBook } from '../library/metadata'
@@ -11,6 +11,7 @@ export function Sidebar() {
   const go = (tab: SidebarTab): void => {
     if (tab === 'library') dispatch({ type: 'navigate', view: { name: 'library' } })
     else if (tab === 'review') dispatch({ type: 'navigate', view: { name: 'review' } })
+    else if (tab === 'vocab') dispatch({ type: 'navigate', view: { name: 'vocab' } })
     else if (tab === 'stats') dispatch({ type: 'navigate', view: { name: 'stats' } })
     else dispatch({ type: 'sidebarTab', tab })
   }
@@ -39,6 +40,7 @@ export function Sidebar() {
         )}
         {item('library', 'Library', <BookOpen size={16} />)}
         {item('highlights', 'Highlights', <Highlighter size={16} />)}
+        {item('vocab', 'Vocabulary', <BookA size={16} />)}
         {item('review', 'Review', <Layers size={16} />, state.dueCount > 0 ? <span className="badge" data-testid="due-badge">{state.dueCount}</span> : undefined)}
         {item('stats', 'Stats', <BarChart3 size={16} />)}
       </nav>

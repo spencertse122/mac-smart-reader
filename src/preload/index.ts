@@ -35,6 +35,12 @@ const api: SmartReaderApi = {
     update: (bookId, id, patch) => invoke(IPC.highlightsUpdate, bookId, id, patch),
     remove: (bookId, id) => invoke(IPC.highlightsRemove, bookId, id)
   },
+  vocab: {
+    lookup: term => invoke(IPC.vocabLookup, term),
+    save: input => invoke(IPC.vocabSave, input),
+    list: () => invoke(IPC.vocabList),
+    remove: id => invoke(IPC.vocabRemove, id)
+  },
   review: {
     queue: () => invoke(IPC.reviewQueue),
     rate: (highlightId, rating, durationMs, promptType) =>

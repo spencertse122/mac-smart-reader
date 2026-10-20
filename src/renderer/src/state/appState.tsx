@@ -6,8 +6,9 @@ export type View =
   | { name: 'reader'; bookId: string; target?: string }
   | { name: 'review' }
   | { name: 'stats' }
+  | { name: 'vocab' }
 
-export type SidebarTab = 'library' | 'highlights' | 'review' | 'stats'
+export type SidebarTab = 'library' | 'highlights' | 'review' | 'stats' | 'vocab'
 
 export interface AppState {
   status: 'loading' | 'ready'
@@ -48,7 +49,7 @@ export const initialState: AppState = {
 }
 
 let toastSeq = 0
-const TAB_FOR_VIEW: Record<View['name'], SidebarTab> = { library: 'library', reader: 'highlights', review: 'review', stats: 'stats' }
+const TAB_FOR_VIEW: Record<View['name'], SidebarTab> = { library: 'library', reader: 'highlights', review: 'review', stats: 'stats', vocab: 'vocab' }
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {

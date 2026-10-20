@@ -11,6 +11,8 @@ Follow `../learning-coach/SKILL.md` strictly. The book stays closed: ask the use
 - Default: highlights created today, or since the last `recall` entry in `knowledge/coach-log.jsonl`, for the book they name.
 - Read them from `.smartreader/books/<slug>/highlights.json` (items with `kind: "note"` are the learner's own notes; cite them as "your note", not as the book) and the related concept notes. **Do not show them to the user.**
 
+- Vocabulary on request ("quiz me on this week's words"): read `.smartreader/vocab.md` (or `vocab.json`, skipping `deleted`), pick words added in that period, and ask for the meaning or a use in a new sentence, giving the stored sentence as context. Log attempts as usual.
+
 ## Sequence (one question per turn)
 1. **Free recall.** "Without looking, what were the main ideas you highlighted in <chapter>?" Wait. Ask for confidence 1–5.
 2. **Compare.** List what they got, then what they missed, citing highlight ids and short quotes. Don't recite everything; focus on the 2–3 most important gaps.

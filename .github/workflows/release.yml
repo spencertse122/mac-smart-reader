@@ -34,6 +34,26 @@ jobs:
           lipo -archs "$PTY/pty.node" | grep -qw x86_64
           lipo -archs "$PTY/spawn-helper" | grep -qw x86_64
           test -x "$PTY/spawn-helper"
+      - name: Check the dictionary helper in both bundles
+        run: |
+          for app in release/mac-arm64/*.app release/mac/*.app; do
+            H="$app/Contents/Resources/bin/dict-lookup"
+            test -x "$H"
+            ARCHS="$(lipo -archs "$H")"
+            echo "$H: $ARCHS"
+            grep -qw arm64 <<<"$ARCHS"
+            grep -qw x86_64 <<<"$ARCHS"
+            codesign --verify --verbose=2 "$H"
+          done
+          # No dictionary assets on the runner is only a warning (exit 1); a crash or usage error (>=2) fails.
+          H="$(ls -d release/mac-arm64/*.app)/Contents/Resources/bin/dict-lookup"
+          set +e
+          OUT="$("$H" serendipity)"
+          CODE=$?
+          set -e
+          echo "dict-lookup serendipity -> exit $CODE: ${OUT:0:200}"
+          if [[ $CODE -eq 1 ]]; then echo "::warning::dict-lookup found no definition (no dictionary assets on this runner?)"; fi
+          if [[ $CODE -ge 2 ]]; then exit 1; fi
       - name: Smoke-launch the packaged arm64 app
         run: |
           APP_BIN="$(ls -d release/mac-arm64/*.app)/Contents/MacOS/Smart Reader"

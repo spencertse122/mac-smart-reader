@@ -208,3 +208,12 @@
   width: 100%; resize: vertical; border: 1px solid var(--separator); border-radius: 8px; padding: 6px 8px;
   font: 13px/1.45 var(--font-ui); background: var(--bg); color: var(--text); outline: none;
 }
+
+/* Look Up result inside the popup */
+.hl-action:disabled { opacity: .4; }
+.hl-lookup { width: 300px; padding: 8px 6px 4px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
+.hl-lookup-head { display: flex; align-items: baseline; gap: 8px; }
+.hl-lookup-head b { font-family: var(--font-serif); font-size: 17px; }
+.hl-lookup-def { max-height: 240px; overflow-y: auto; white-space: pre-wrap; user-select: text; }
+.hl-lookup-sentence { font-size: 12px; font-style: italic; }
+.hl-lookup-saved { font-size: 11px; color: var(--success); }

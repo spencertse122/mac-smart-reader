@@ -16,7 +16,7 @@ export type SessionAction =
   | { type: 'rated'; entry: ReviewLogEntry; now: number }
   | { type: 'more'; cards: ReviewCard[]; now: number }
 
-export const needsReveal = (c: ReviewCard | undefined): boolean => c?.promptType === 'ai'
+export const needsReveal = (c: ReviewCard | undefined): boolean => c?.promptType === 'ai' || c?.promptType === 'word'
 
 export const initialSession: SessionState = { cards: [], index: 0, revealed: false, shownAt: 0, results: [], startedAt: null, phase: 'loading' }
 

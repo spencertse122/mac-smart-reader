@@ -53,6 +53,35 @@ export interface HighlightsFile { version: 1; bookId: string; highlights: Highli
 
 export const LIMITS = { contextChars: 600, quoteAffixChars: 64, exactMaxChars: 3000, noteMaxChars: 5000 } as const
 
+export interface DictEntry {
+  headword: string
+  pronunciation: string | null
+  text: string // definition, display-ready (line breaks before senses/bullets, no etymology tail)
+  raw: string
+}
+export type DictLookupResult = { ok: true; entry: DictEntry } | { ok: false; reason: 'not-found' | 'unavailable' }
+
+export interface VocabContext { bookId: string; sentence: string; location: string; chapter: string | null; at: string }
+export interface VocabWord {
+  id: string // 'w_<uuid>'; also the review card key
+  headword: string
+  pronunciation: string | null
+  definition: string
+  contexts: VocabContext[] // newest last, at most VOCAB_MAX_CONTEXTS
+  createdAt: string
+  updatedAt: string
+  deleted: boolean
+}
+export interface VocabFile { version: 1; words: VocabWord[] }
+export interface NewVocab {
+  headword: string
+  pronunciation: string | null
+  definition: string
+  context: { bookId: string; sentence: string; location: string; chapter: string | null }
+}
+export const VOCAB_MAX_CONTEXTS = 5
+export const VOCAB_SENTENCE_MAX = 300
+
 export type FsrsState = 0 | 1 | 2 | 3 // ts-fsrs State: New, Learning, Review, Relearning
 
 export interface CardState {
@@ -74,7 +103,7 @@ export interface ReviewStateFile { version: 1; desiredRetention: number; cards: 
 
 export type Rating = 'again' | 'hard' | 'good' | 'easy'
 // 'cloze' only appears in old review-log lines; new code never produces it
-export type PromptType = 'ai' | 'highlight' | 'note' | 'cloze'
+export type PromptType = 'ai' | 'highlight' | 'note' | 'word' | 'cloze'
 
 export interface ReviewLogEntry {
   ts: string
@@ -101,6 +130,9 @@ export interface ReviewCard {
   note: string | null
   aiAnswer: string | null
   isNew: boolean
+  // promptType 'word' only: `highlightId` is the word id, `prompt` the headword, `answer` the definition
+  pronunciation?: string | null
+  context?: string | null // sentence of the word's first context
 }
 
 export interface PromptIssues { invalidLines: number; unknownHighlightIds: number }

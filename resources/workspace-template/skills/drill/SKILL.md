@@ -7,6 +7,8 @@ description: Practice the user's weakest material — flashcards they keep faili
 
 Follow `../learning-coach/SKILL.md`.
 
+- Words: cards with ids starting `w_` are looked-up vocabulary (`.smartreader/vocab.md`). Drill failed ones by asking for the meaning in the stored sentence, then a new sentence of the learner's own.
+
 1. **Find weak items** (cap at 5 for one drill):
    - `.smartreader/review-log.jsonl`: highlights with ≥2 `again` ratings in their last 5 reviews.
    - `.smartreader/review-state.json`: cards with `lapses` ≥2.

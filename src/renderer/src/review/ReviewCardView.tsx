@@ -1,6 +1,7 @@
 import type { ReviewCard } from '../../../shared/types'
+import { Emphasized } from '../vocab/Emphasized'
 
-const TAGS = { ai: 'Question', highlight: 'Highlight', note: 'Your note', cloze: 'Highlight' } as const
+const TAGS = { ai: 'Question', highlight: 'Highlight', note: 'Your note', word: 'Word', cloze: 'Highlight' } as const
 
 interface Props {
   card: ReviewCard
@@ -20,6 +21,7 @@ function Source({ card }: { card: ReviewCard }) {
 
 export function ReviewCardView({ card, position, total, revealed, onReveal, onNext, onSooner, onOpen }: Props) {
   const ai = card.promptType === 'ai'
+  const word = card.promptType === 'word'
   return (
     <div className="card review-card" data-testid="review-card" key={card.highlightId}>
       <div className="review-meta muted">
@@ -29,7 +31,9 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
         <span className="review-progress">{position} / {total}</span>
       </div>
 
-      {ai ? (
+      {word ? (
+        <div className="review-word" data-testid="review-prompt">{card.prompt}</div>
+      ) : ai ? (
         <div className="review-prompt" data-testid="review-prompt">{card.prompt}</div>
       ) : card.promptType === 'note' ? (
         <div className="review-usernote" data-testid="review-prompt">{card.prompt}</div>
@@ -42,11 +46,23 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
 
       {!revealed ? (
         <div className="review-footer">
-          <div className="muted">Think of the answer, then press <b>Space</b></div>
+          <div className="muted">{word ? <>What does it mean? Say it to yourself, then press <b>Space</b></> : <>Think of the answer, then press <b>Space</b></>}</div>
           <button className="btn btn-primary" data-testid="review-reveal" onClick={onReveal}>Show Answer</button>
         </div>
       ) : (
         <div data-testid="review-answer">
+          {word && (
+            <>
+              <hr className="review-sep" />
+              {card.pronunciation && <div className="review-pron muted" data-testid="review-pron">/{card.pronunciation}/</div>}
+              <div className="review-def" data-testid="review-def">{card.answer}</div>
+              {card.context && (
+                <blockquote className="review-quote review-context" data-testid="review-context">
+                  <Emphasized sentence={card.context} terms={[card.prompt]} />
+                </blockquote>
+              )}
+            </>
+          )}
           {ai && (
             <>
               <hr className="review-sep" />
@@ -62,8 +78,8 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
             </>
           )}
           <div className="review-rates">
-            <button className="btn review-rate" data-testid="review-sooner" onClick={onSooner}>Sooner <kbd>S</kbd></button>
-            <button className="btn btn-primary review-rate" data-testid="review-next" onClick={onNext}>Next <kbd>Space</kbd></button>
+            <button className="btn review-rate" data-testid="review-sooner" onClick={onSooner}>{word ? 'Forgot' : 'Sooner'} <kbd>S</kbd></button>
+            <button className="btn btn-primary review-rate" data-testid="review-next" onClick={onNext}>{word ? 'Got it' : 'Next'} <kbd>Space</kbd></button>
           </div>
           <div className="review-footer">
             <button className="btn btn-ghost" data-testid="review-open" onClick={onOpen}>Open in book <kbd>⌘O</kbd></button>
