@@ -21,7 +21,7 @@ test('remembered library opens to the shell; navigation and terminal toggle work
 })
 
 test('missing remembered folder falls back to Welcome with an error toast', async () => {
-  const { app, page } = await launchApp({ library: '/no/such/library' })
+  const { app, page } = await launchApp({ library: '/no/such/library', waitForShell: false })
   await expect(page.getByTestId('choose-folder')).toBeVisible()
   await expect(page.getByTestId('toast')).toContainText('Folder not found')
   await app.close()

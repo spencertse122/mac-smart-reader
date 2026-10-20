@@ -11,6 +11,8 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
+    "lint:ts": "npm run typecheck",
+    "test:all": "npm run typecheck && npm test && npm run e2e",
     "e2e": "electron-vite build && playwright test",
     "postinstall": "electron-builder install-app-deps",
     "fixtures:pdf": "node scripts/make-fixture-pdf.mjs tests/fixtures/books/sample.pdf",
