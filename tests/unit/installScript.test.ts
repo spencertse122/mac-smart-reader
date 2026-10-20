@@ -34,6 +34,8 @@ describe('install.sh', () => {
     expect(s).toMatch(/x64/)
     expect(s).toContain('/Applications/Smart Reader.app')
     expect(s).not.toMatch(/\|\s*(jq|python3?)\b/) // stock macOS has neither
+    // macOS ships bash 3.2, which treats a multibyte char after $VAR as part of the name ("ARCH…: unbound variable")
+    expect(s).toMatch(/^[\x00-\x7F]*$/)
   })
 
   it('asset_url picks the DMG for the arch from pretty-printed API JSON', () => {
