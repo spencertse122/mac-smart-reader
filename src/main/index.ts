@@ -6,6 +6,7 @@ import { SettingsStore } from './settings'
 import { PtyService } from './pty/ptyService'
 import { registerIpc, type IpcHandle } from './ipc'
 import { buildMenu } from './menu'
+import { DictionaryService } from './dictionary/dictionaryService'
 import { setRecoveryListener } from './store/atomic'
 
 protocol.registerSchemesAsPrivileged([
@@ -87,6 +88,10 @@ function templateDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'workspace-template') : join(app.getAppPath(), 'resources', 'workspace-template')
 }
 
+function dictHelperPath(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'bin', 'dict-lookup') : join(app.getAppPath(), 'resources', 'bin', 'dict-lookup')
+}
+
 let ipcHandle: IpcHandle | null = null
 let draining = false
 
@@ -101,6 +106,7 @@ async function bootstrap(): Promise<void> {
     settings,
     templateDir: templateDir(),
     pty,
+    dictionary: new DictionaryService({ helperPath: dictHelperPath() }),
     onSettingsChanged: s => setMenu(s.recentLibraries)
   }))
   setRecoveryListener(e =>

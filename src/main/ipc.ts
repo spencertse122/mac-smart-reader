@@ -6,12 +6,14 @@ import type { Settings } from '../shared/types'
 import { Workspace } from './workspace'
 import type { SettingsStore } from './settings'
 import type { PtyService } from './pty/ptyService'
+import type { DictionaryService } from './dictionary/dictionaryService'
 
 export interface IpcContext {
   getWindow: () => BrowserWindow | null
   settings: SettingsStore
   templateDir: string
   pty: PtyService
+  dictionary: DictionaryService
   onSettingsChanged: (s: Settings) => void
 }
 
@@ -105,6 +107,18 @@ export function registerIpc(ctx: IpcContext): IpcHandle {
   })
   handle(IPC.highlightsRemove, async (bookId: string, id: string) => {
     await need().highlights.remove(bookId, id)
+    reviewChanged()
+  })
+
+  handle(IPC.vocabLookup, (term: string) => ctx.dictionary.lookup(String(term ?? '')))
+  handle(IPC.vocabSave, async input => {
+    const r = await need().vocab.save(input)
+    reviewChanged()
+    return r
+  })
+  handle(IPC.vocabList, () => need().vocab.list())
+  handle(IPC.vocabRemove, async (id: string) => {
+    await need().vocab.remove(id)
     reviewChanged()
   })
 

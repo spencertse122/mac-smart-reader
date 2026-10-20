@@ -16,3 +16,4 @@ playwright-report
 *.fb2
 *.cbz
 !tests/fixtures/books/*
+resources/bin

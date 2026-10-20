@@ -1,10 +1,12 @@
 import { join } from 'node:path'
-import type { CardState, Highlight, PromptIssues, PromptLine, PromptType, Rating, ReviewCard, ReviewLogEntry, ReviewStateFile } from '../../shared/types'
+import type { CardState, Highlight, VocabWord, PromptIssues, PromptLine, PromptType, Rating, ReviewCard, ReviewLogEntry, ReviewStateFile } from '../../shared/types'
 import { localDay } from '../../shared/dates'
 import { jsonFile, type JsonFile } from '../store/jsonFile'
 import { appendJsonl, readJsonl } from '../store/jsonl'
 import { newCardState, retrievability, schedule } from './scheduler'
 import { buildPrompt, cardSource } from './cards'
+
+interface LiveItem { bookId: string; created: string; h?: Highlight; w?: VocabWord }
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -12,9 +14,14 @@ export interface HighlightSource {
   listAllBooks(): Promise<Array<{ bookId: string; highlights: Highlight[] }>>
 }
 
+export interface VocabSource {
+  listAll(): Promise<VocabWord[]> // including deleted words, whose cards get suspended
+}
+
 export interface ReviewDeps {
   dataDir: string
   highlights: HighlightSource
+  vocab?: VocabSource
   bookTitle: (bookId: string) => Promise<string>
   prompts: { get(id: string): PromptLine | undefined; ids(): string[]; readonly invalidLines: number }
   newCardsPerDay: () => Promise<number>
@@ -37,17 +44,33 @@ export class ReviewService {
     this.logPath = join(deps.dataDir, 'review-log.jsonl')
   }
 
-  private async liveHighlights(): Promise<Map<string, { bookId: string; h: Highlight }>> {
-    const map = new Map<string, { bookId: string; h: Highlight }>()
+  private async liveItems(): Promise<Map<string, LiveItem>> {
+    const map = new Map<string, LiveItem>()
     for (const { bookId, highlights } of await this.deps.highlights.listAllBooks()) {
-      for (const h of highlights) if (!h.deleted) map.set(h.id, { bookId, h })
+      for (const h of highlights) if (!h.deleted) map.set(h.id, { bookId, created: h.createdAt, h })
     }
+    for (const w of await this.words()) if (!w.deleted) map.set(w.id, { bookId: w.contexts[0]?.bookId ?? '', created: w.createdAt, w })
     return map
+  }
+
+  private words(): Promise<VocabWord[]> {
+    return this.deps.vocab ? this.deps.vocab.listAll() : Promise.resolve([])
   }
 
   async sync(): Promise<void> {
     const books = await this.deps.highlights.listAllBooks()
+    const words = await this.words()
     await this.state.update(d => {
+      for (const w of words) {
+        const c = d.cards[w.id]
+        if (w.deleted) {
+          if (c) c.suspended = true
+        } else if (!c) {
+          d.cards[w.id] = newCardState(w.contexts[0]?.bookId ?? '', new Date(w.createdAt))
+        } else if (c.suspended) {
+          c.suspended = false // looked up again after a delete
+        }
+      }
       for (const { bookId, highlights } of books) {
         for (const h of highlights) {
           const c = d.cards[h.id]
@@ -76,13 +99,13 @@ export class ReviewService {
     await this.sync()
     const now = this.now()
     const st = await this.state.read()
-    const live = await this.liveHighlights()
+    const live = await this.liveItems()
     const due: Array<{ id: string; r: number }> = []
     const fresh: Array<{ id: string; created: string }> = []
     for (const [id, c] of Object.entries(st.cards)) {
       const entry = live.get(id)
       if (c.suspended || !entry) continue
-      if (c.state === 0) fresh.push({ id, created: entry.h.createdAt })
+      if (c.state === 0) fresh.push({ id, created: entry.created })
       else if (new Date(c.due) <= now) due.push({ id, r: retrievability(c, now, st.desiredRetention) })
     }
     due.sort((a, b) => a.r - b.r)
@@ -93,8 +116,30 @@ export class ReviewService {
     const titles = new Map<string, string>()
     const cards: ReviewCard[] = []
     for (const id of ids) {
-      const { bookId, h } = live.get(id)!
-      if (!titles.has(bookId)) titles.set(bookId, await this.deps.bookTitle(bookId).catch(() => 'Unknown book'))
+      const item = live.get(id)!
+      const { bookId } = item
+      if (!titles.has(bookId)) titles.set(bookId, !bookId ? 'Unknown book' : await this.deps.bookTitle(bookId).catch(() => 'Unknown book'))
+      if (item.w) {
+        const w = item.w
+        const ctx = w.contexts[0]
+        cards.push({
+          highlightId: id,
+          bookId,
+          bookTitle: titles.get(bookId)!,
+          chapter: ctx?.chapter ?? null,
+          location: ctx?.location ?? '',
+          promptType: 'word',
+          prompt: w.headword,
+          answer: w.definition,
+          note: null,
+          aiAnswer: null,
+          pronunciation: w.pronunciation,
+          context: ctx?.sentence || null,
+          isNew: st.cards[id].state === 0
+        })
+        continue
+      }
+      const h = item.h!
       cards.push({
         highlightId: id,
         bookId,

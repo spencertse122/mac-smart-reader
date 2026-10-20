@@ -16,6 +16,9 @@ files:
 extraResources:
   - from: resources/workspace-template
     to: workspace-template
+  # macOS dictionary helper (built by scripts/build-dict-helper.sh; absent on non-mac dev machines)
+  - from: resources/bin
+    to: bin
 asarUnpack:
   - node_modules/node-pty/**
 # No rebuild: avoids cross-compiling node-pty for x64 on an arm64 runner.

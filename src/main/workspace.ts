@@ -3,6 +3,7 @@ import { constants } from 'node:fs'
 import { join } from 'node:path'
 import { LibraryService } from './library/libraryService'
 import { HighlightStore } from './highlights/highlightStore'
+import { VocabStore } from './vocab/vocabStore'
 import { PromptWatcher } from './review/prompts'
 import { ReviewService } from './review/reviewService'
 import { retrievability } from './review/scheduler'
@@ -24,6 +25,7 @@ export class Workspace {
     readonly root: string,
     readonly library: LibraryService,
     readonly highlights: HighlightStore,
+    readonly vocab: VocabStore,
     readonly review: ReviewService,
     readonly sessions: SessionLog,
     readonly stats: StatsService,
@@ -46,12 +48,14 @@ export class Workspace {
       const b = await library.get(id)
       return { bookId: id, slug: b.slug, title: b.title, author: b.author }
     }, now)
+    const vocab = new VocabStore(library.dataDir, async id => (await library.get(id)).title, now)
     const prompts = new PromptWatcher(join(root, 'knowledge', 'prompts.jsonl'), opts.onReviewChanged)
     await prompts.load()
     prompts.start()
     const review = new ReviewService({
       dataDir: library.dataDir,
       highlights,
+      vocab,
       bookTitle: async id => (await library.get(id)).title,
       prompts,
       newCardsPerDay: opts.newCardsPerDay,
@@ -68,7 +72,7 @@ export class Workspace {
       now
     })
     await stats.get() // records today's K snapshot
-    return new Workspace(root, library, highlights, review, sessions, stats, prompts)
+    return new Workspace(root, library, highlights, vocab, review, sessions, stats, prompts)
   }
 
   close(): void {

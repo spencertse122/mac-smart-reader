@@ -1,6 +1,6 @@
 import type { ReviewCard } from '../../../shared/types'
 
-const TAGS = { ai: 'Question', highlight: 'Highlight', note: 'Your note', cloze: 'Highlight' } as const
+const TAGS = { ai: 'Question', highlight: 'Highlight', note: 'Your note', word: 'Word', cloze: 'Highlight' } as const
 
 interface Props {
   card: ReviewCard
