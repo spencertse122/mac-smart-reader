@@ -5,6 +5,7 @@ export interface FoliateBook {
   toc?: FoliateTocItem[]
   sections: unknown[]
   getCover?: () => Promise<Blob | null>
+  transformTarget?: EventTarget
 }
 export interface FoliateOverlayer {
   highlight: (rects: unknown, options?: { color?: string }) => SVGElement
@@ -24,6 +25,27 @@ export async function loadFoliateView(): Promise<void> {
 
 export async function makeBook(file: File): Promise<FoliateBook> {
   return (await viewModule()).makeBook(file)
+}
+
+const SCRIPT_TYPE = /^(application|text)\/(x-)?(java|ecma)script$/i
+const MARKUP_TYPES = ['application/xhtml+xml', 'text/html', 'image/svg+xml']
+
+export function stripScripts(markup: string): string {
+  return markup.replace(/<script\b[^>]*\/>/gi, '').replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+}
+
+// Defense in depth for book content (the CSP is the real control): drop script resources and
+// <script> elements before foliate turns them into same-origin blob: URLs, where they could reach window.api.
+export function neuterBookScripts(book: FoliateBook): void {
+  book.transformTarget?.addEventListener('data', e => {
+    const detail = (e as CustomEvent<{ data: unknown; type: unknown }>).detail
+    detail.data = Promise.all([detail.data, detail.type]).then(([data, type]) => {
+      if (typeof type !== 'string') return data
+      if (SCRIPT_TYPE.test(type)) return ''
+      if (typeof data === 'string' && MARKUP_TYPES.includes(type)) return stripScripts(data)
+      return data
+    })
+  })
 }
 
 export async function loadOverlayer(): Promise<FoliateOverlayer> {

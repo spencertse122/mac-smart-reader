@@ -3,7 +3,7 @@ import type { Highlight, HighlightColor, Settings } from '../../../shared/types'
 import { LIMITS } from '../../../shared/types'
 import { useAppState } from '../state/appState'
 import { refreshBooks, toast } from '../state/actions'
-import { bookFile, loadFoliateView, loadOverlayer, type FoliateOverlayer, type FoliateTocItem } from '../reader/foliate'
+import { bookFile, loadFoliateView, loadOverlayer, makeBook, neuterBookScripts, type FoliateBook, type FoliateOverlayer, type FoliateTocItem } from '../reader/foliate'
 import { emitReader, onReader } from '../reader/bus'
 import { HIGHLIGHT_FILL, readerCss } from '../reader/readerStyles'
 import { contextFromRange, quoteFromRange } from '../reader/selection'
@@ -15,7 +15,7 @@ import { TocDrawer } from '../reader/TocDrawer'
 import '../reader/reader.css'
 
 type FoliateView = HTMLElement & {
-  open(f: File): Promise<void>
+  open(b: File | FoliateBook): Promise<void>
   init(o: { lastLocation?: string; showTextStart?: boolean }): Promise<void>
   goTo(t: string | number): Promise<unknown>
   goLeft(): Promise<void>
@@ -528,7 +528,10 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       viewRef.current = view
 
       try {
-        await view.open(file)
+        const book = await makeBook(file)
+        neuterBookScripts(book)
+        if (disposed) return
+        await view.open(book)
       } catch (err) {
         if (disposed) return
         const e = err as Error

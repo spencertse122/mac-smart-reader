@@ -14,9 +14,19 @@ protocol.registerSchemesAsPrivileged([
 if (process.env.SR_USER_DATA) app.setPath('userData', process.env.SR_USER_DATA)
 
 const RENDERER_DIR = join(__dirname, '../renderer')
+const APP_URL = process.env.ELECTRON_RENDERER_URL ?? 'app://bundle/index.html'
+
+// Only the app's own pages may load in the window: a dropped file or a stray link would otherwise
+// replace the UI, and a dropped .html would run with the preload's window.api.
+function isAppUrl(url: string): boolean {
+  if (url.startsWith('app://bundle/')) return true
+  const dev = process.env.ELECTRON_RENDERER_URL
+  return !!dev && url.startsWith(new URL('/', dev).href)
+}
 const CSP = [
   "default-src 'self' app: blob: data:",
-  "script-src 'self' app: blob:",
+  // no blob: here: foliate turns an EPUB's <script src> into a blob: URL in a same-origin iframe
+  "script-src 'self' app:",
   "style-src 'self' 'unsafe-inline' app: blob:",
   "img-src 'self' app: blob: data:",
   "font-src 'self' app: blob: data:",
@@ -62,7 +72,12 @@ export function createMainWindow(): BrowserWindow {
     if (/^https?:/.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-  void win.loadURL(process.env.ELECTRON_RENDERER_URL ?? 'app://bundle/index.html')
+  win.webContents.on('will-navigate', (e, url) => {
+    if (isAppUrl(url)) return
+    e.preventDefault()
+    if (/^https?:/i.test(url)) void shell.openExternal(url)
+  })
+  void win.loadURL(APP_URL)
   return win
 }
 
