@@ -73,10 +73,14 @@ export function ReviewView() {
       if (cur.phase !== 'card') return
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); open(); return }
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key === ' ') { e.preventDefault(); dispatch({ type: 'reveal' }) }
-      else if (cur.revealed) {
-        const r = ({ '1': 'again', '2': 'hard', '3': 'good', '4': 'easy' } as const)[e.key as '1']
-        if (r) void rate(r)
+      if (e.key === ' ' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (e.repeat) return
+        if (cur.revealed) void rate('good')
+        else dispatch({ type: 'reveal' })
+      } else if (cur.revealed && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        void rate('again')
       }
     }
     window.addEventListener('keydown', onKey)
@@ -90,7 +94,7 @@ export function ReviewView() {
   if (s.phase === 'card' && card) {
     body = (
       <ReviewCardView card={card} position={s.index + 1} total={s.cards.length} revealed={s.revealed}
-        onReveal={() => dispatch({ type: 'reveal' })} onRate={r => void rate(r)} onOpen={open} />
+        onReveal={() => dispatch({ type: 'reveal' })} onNext={() => void rate('good')} onSooner={() => void rate('again')} onOpen={open} />
     )
   } else if (s.phase === 'empty') {
     body = (
@@ -99,7 +103,7 @@ export function ReviewView() {
           <circle cx="12" cy="12" r="10" /><path d="m8 12.5 3 3 5-6" />
         </svg>
         <h2>You're all caught up</h2>
-        <div className="muted">Highlight while reading — each highlight becomes a card.</div>
+        <div className="muted">Highlight or jot a note while reading — each one comes back here.</div>
       </div>
     )
   } else if (s.phase === 'done') {
@@ -109,7 +113,7 @@ export function ReviewView() {
         <div className="review-stats">
           <div className="review-tile"><b>{sum.count}</b><span>Cards</span></div>
           <div className="review-tile"><b>{sum.minutes}</b><span>Minutes</span></div>
-          <div className="review-tile"><b>{Math.round(sum.avgRetrievability * 100)}%</b><span>Avg. recall before review</span></div>
+          <div className="review-tile"><b>{Math.round(sum.avgRetrievability * 100)}%</b><span>Avg. freshness before review</span></div>
         </div>
         <button className="btn btn-primary" onClick={() => appDispatch({ type: 'navigate', view: { name: 'library' } })}>Back to Library</button>
       </div>

@@ -16,13 +16,15 @@ export type SessionAction =
   | { type: 'rated'; entry: ReviewLogEntry; now: number }
   | { type: 'more'; cards: ReviewCard[]; now: number }
 
+export const needsReveal = (c: ReviewCard | undefined): boolean => c?.promptType === 'ai'
+
 export const initialSession: SessionState = { cards: [], index: 0, revealed: false, shownAt: 0, results: [], startedAt: null, phase: 'loading' }
 
 export function sessionReducer(s: SessionState, a: SessionAction): SessionState {
   switch (a.type) {
     case 'loaded':
       return a.cards.length
-        ? { ...initialSession, cards: a.cards, phase: 'card', shownAt: a.now, startedAt: a.now }
+        ? { ...initialSession, cards: a.cards, phase: 'card', revealed: !needsReveal(a.cards[0]), shownAt: a.now, startedAt: a.now }
         : { ...initialSession, phase: 'empty' }
     case 'reveal':
       return s.phase === 'card' ? { ...s, revealed: true } : s
@@ -30,11 +32,11 @@ export function sessionReducer(s: SessionState, a: SessionAction): SessionState 
       const results = [...s.results, a.entry]
       const index = s.index + 1
       return index < s.cards.length
-        ? { ...s, results, index, revealed: false, shownAt: a.now }
+        ? { ...s, results, index, revealed: !needsReveal(s.cards[index]), shownAt: a.now }
         : { ...s, results, index, revealed: false, phase: 'done' }
     }
     case 'more':
-      return a.cards.length ? { ...s, cards: [...s.cards, ...a.cards], phase: 'card', revealed: false, shownAt: a.now } : s
+      return a.cards.length ? { ...s, cards: [...s.cards, ...a.cards], phase: 'card', revealed: !needsReveal(a.cards[0]), shownAt: a.now } : s
   }
 }
 

@@ -21,7 +21,7 @@ export function KnowledgeRate() {
   if (!open) return null
   return (
     <button className="status-item" data-testid="status-rate"
-      title="Retrievable knowledge gained per hour of reading and review (30 days)"
+      title="Fresh items per hour of reading and review (last 30 days)"
       onClick={() => dispatch({ type: 'navigate', view: { name: 'stats' } })}>
       <Brain size={13} /> {formatRate(rate)}
     </button>

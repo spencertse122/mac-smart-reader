@@ -15,6 +15,8 @@ test('stats page renders KPIs and charts after a review', async () => {
   })
   await page.getByTestId('nav-stats').click()
   await expect(page.getByTestId('kpi-rate')).toBeVisible()
+  await expect(page.getByText('Fresh in mind').first()).toBeVisible()
+  await expect(page.getByTestId('status-rate')).toHaveAttribute('title', /Fresh items per hour/)
   await expect(page.locator('[data-testid="view-stats"] svg').first()).toBeVisible()
   await expect(page.getByTestId('status-rate')).toBeVisible()
   await app.close()

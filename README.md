@@ -42,10 +42,12 @@ Your books are never modified or uploaded.
 ## Daily use
 
 - **Highlight:** select text, then pick a color.
-- **Review:** open the review view, press Space to reveal, then 1 to 4 to grade (Again, Hard, Good, Easy).
+- **Notes:** press Shift+Command+N (or the Note button) to jot a thought without selecting text. Notes show up in the highlights panel and come back in Review.
+- **Review:** each highlight or note shows up as you wrote it. Press Space or the right arrow for Next, or S for Sooner (see it again within a day). Cards the AI coach turned into questions reveal the answer on Space first.
+- **Continue Reading:** the first sidebar item (or Command+B) reopens the book you read last, where you left off.
 - **Pomodoro:** Option+Command+P starts or pauses a focus timer.
 - **Terminal:** Command+J toggles the side terminal.
-- **Stats:** see your reading and review streaks in the stats view.
+- **Stats:** "Fresh in mind" counts how many of your highlights and notes are likely still fresh; reading adds items and reviewing keeps them fresh. Streaks are there too.
 
 ## AI coach
 
@@ -59,7 +61,7 @@ npm install -g @google/gemini-cli          # Gemini
 
 Open the terminal (Command+J), start the agent, and try:
 
-- "distill my new highlights"
+- "distill my new highlights and notes"
 - "recall chapter 3"
 - "drill my weak spots"
 - "what do I know about incentives?"
