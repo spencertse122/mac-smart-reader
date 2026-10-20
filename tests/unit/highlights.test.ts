@@ -81,6 +81,30 @@ describe('HighlightStore', () => {
     await expect(store.update('b1', 'h_missing', { color: 'blue' })).rejects.toThrow('not found')
   })
 
+  it('addNote creates a kind:note item, trimmed, with an empty quote', async () => {
+    const n = await store.addNote('b1', { location: 'cfi-x', chapter: 'Ch 3', position: 0.4, text: '  my thought\nsecond line ' })
+    expect(n).toMatchObject({ kind: 'note', note: 'my thought\nsecond line', quote: { exact: '', prefix: '', suffix: '' }, context: '', location: 'cfi-x', chapter: 'Ch 3', position: 0.4, color: 'yellow', deleted: false })
+    expect((await store.list('b1')).map(x => x.id)).toEqual([n.id])
+    const md = await readFile(join(dataDir, 'books', 'deep-work-b1b1b1', 'highlights.md'), 'utf8')
+    expect(md).toContain('**Note:** my thought\n  second line\n- id: ' + n.id + ' · note · 2026-10-20')
+    await store.remove('b1', n.id)
+    expect(await store.list('b1')).toEqual([])
+  })
+
+  it('addNote rejects empty and too-long text; allows unknown location', async () => {
+    await expect(store.addNote('b1', { location: '', chapter: null, position: 0, text: '  \n ' })).rejects.toThrow('Note is empty')
+    await expect(store.addNote('b1', { location: '', chapter: null, position: 0, text: 'x'.repeat(5001) })).rejects.toThrow('Note is too long')
+    await expect(store.addNote('b1', { location: '', chapter: null, position: 0, text: 'x'.repeat(5000) })).resolves.toMatchObject({ location: '' })
+  })
+
+  it('updating a note edits its text but never to empty', async () => {
+    const n = await store.addNote('b1', { location: 'c', chapter: null, position: 0, text: 'first' })
+    expect(await store.update('b1', n.id, { note: 'second' })).toMatchObject({ note: 'second', kind: 'note' })
+    await expect(store.update('b1', n.id, { note: '   ' })).rejects.toThrow('Note is empty')
+    await expect(store.update('b1', n.id, { note: null })).rejects.toThrow('Note is empty')
+    expect((await store.list('b1'))[0].note).toBe('second')
+  })
+
   it('remove soft-deletes; listAllBooks includes deleted across books', async () => {
     const h = await store.add('b1', nh())
     await store.add('b2', nh())
@@ -149,6 +173,16 @@ describe('renderHighlightsMarkdown', () => {
     expect(md).toContain('- id: h_1 · color: yellow · 2026-10-19')
     expect(md).not.toContain('gone')
     expect(md.startsWith('# T\n')).toBe(true)
+  })
+
+  it('renders notes among highlights by position under their chapter', () => {
+    const md = renderHighlightsMarkdown({ title: 'T', author: '' }, [
+      { id: 'n_1', kind: 'note', location: '', quote: { exact: '', prefix: '', suffix: '' }, context: '', chapter: 'A', position: 0.2, color: 'yellow', note: 'line1\nline2', createdAt: '2026-10-19T00:00:00Z', updatedAt: '', deleted: false },
+      { id: 'h_1', location: '', quote: { exact: 'quote', prefix: '', suffix: '' }, context: '', chapter: 'A', position: 0.1, color: 'yellow', note: null, createdAt: '2026-10-19T00:00:00Z', updatedAt: '', deleted: false }
+    ])
+    expect(md.indexOf('> quote')).toBeLessThan(md.indexOf('**Note:**'))
+    expect(md).toContain('**Note:** line1\n  line2\n- id: n_1 · note · 2026-10-19')
+    expect(md.match(/## A/g)).toHaveLength(1)
   })
 
   it('renders an empty-state line', () => {

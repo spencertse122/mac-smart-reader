@@ -1,19 +1,6 @@
-import type { Rating, ReviewCard } from '../../../shared/types'
+import type { ReviewCard } from '../../../shared/types'
 
-const TAGS = { ai: 'AI question', note: 'Your question', cloze: 'Fill in the blank' } as const
-const RATINGS: Array<{ rating: Rating; label: string; key: number }> = [
-  { rating: 'again', label: 'Again', key: 1 },
-  { rating: 'hard', label: 'Hard', key: 2 },
-  { rating: 'good', label: 'Good', key: 3 },
-  { rating: 'easy', label: 'Easy', key: 4 }
-]
-
-function renderPrompt(card: ReviewCard) {
-  if (card.promptType !== 'cloze') return card.prompt
-  return card.prompt.split(/(▁▁▁▁(?: \(~\d+ words?\))?)/).map((part, i) =>
-    part.startsWith('▁▁▁▁') ? <span key={i} className="review-blank">{part}</span> : part
-  )
-}
+const TAGS = { ai: 'Question', highlight: 'Highlight', note: 'Your note', cloze: 'Highlight' } as const
 
 interface Props {
   card: ReviewCard
@@ -21,11 +8,18 @@ interface Props {
   total: number
   revealed: boolean
   onReveal: () => void
-  onRate: (r: Rating) => void
+  onNext: () => void
+  onSooner: () => void
   onOpen: () => void
 }
 
-export function ReviewCardView({ card, position, total, revealed, onReveal, onRate, onOpen }: Props) {
+function Source({ card }: { card: ReviewCard }) {
+  if (!card.answer) return null
+  return <blockquote className="review-quote" data-testid="review-source">{card.answer}</blockquote>
+}
+
+export function ReviewCardView({ card, position, total, revealed, onReveal, onNext, onSooner, onOpen }: Props) {
+  const ai = card.promptType === 'ai'
   return (
     <div className="card review-card" data-testid="review-card" key={card.highlightId}>
       <div className="review-meta muted">
@@ -34,29 +28,42 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onRa
         {card.isNew && <span className="review-tag">New</span>}
         <span className="review-progress">{position} / {total}</span>
       </div>
-      <div className="review-prompt" data-testid="review-prompt">{renderPrompt(card)}</div>
+
+      {ai ? (
+        <div className="review-prompt" data-testid="review-prompt">{card.prompt}</div>
+      ) : card.promptType === 'note' ? (
+        <div className="review-usernote" data-testid="review-prompt">{card.prompt}</div>
+      ) : (
+        <>
+          <blockquote className="review-quote review-quote-main" data-testid="review-prompt">{card.prompt}</blockquote>
+          {card.note && <div className="review-note" data-testid="review-note">{card.note}</div>}
+        </>
+      )}
+
       {!revealed ? (
         <div className="review-footer">
-          <div className="muted">Recall it, then press <b>Space</b></div>
+          <div className="muted">Think of the answer, then press <b>Space</b></div>
           <button className="btn btn-primary" data-testid="review-reveal" onClick={onReveal}>Show Answer</button>
         </div>
       ) : (
         <div data-testid="review-answer">
-          <hr className="review-sep" />
-          <div className="review-answer">{card.answer}</div>
-          {card.note && <div className="review-note">{card.note}</div>}
-          {card.aiAnswer && (
-            <div className="review-ai">
-              <div className="review-label muted">Model answer</div>
-              <div>{card.aiAnswer}</div>
-            </div>
+          {ai && (
+            <>
+              <hr className="review-sep" />
+              {card.aiAnswer && (
+                <div className="review-ai">
+                  <div className="review-label muted">Answer</div>
+                  <div>{card.aiAnswer}</div>
+                </div>
+              )}
+              <div className="review-label muted review-source-label">Source</div>
+              <Source card={card} />
+              {card.note && card.note !== card.answer && <div className="review-note">{card.note}</div>}
+            </>
           )}
           <div className="review-rates">
-            {RATINGS.map(r => (
-              <button key={r.rating} className={`btn review-rate rate-${r.rating}`} data-testid={`rate-${r.rating}`} onClick={() => onRate(r.rating)}>
-                {r.label} <kbd>{r.key}</kbd>
-              </button>
-            ))}
+            <button className="btn review-rate" data-testid="review-sooner" onClick={onSooner}>Sooner <kbd>S</kbd></button>
+            <button className="btn btn-primary review-rate" data-testid="review-next" onClick={onNext}>Next <kbd>Space</kbd></button>
           </div>
           <div className="review-footer">
             <button className="btn btn-ghost" data-testid="review-open" onClick={onOpen}>Open in book <kbd>⌘O</kbd></button>

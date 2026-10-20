@@ -10,10 +10,11 @@ Follow `../learning-coach/SKILL.md`.
 ## 1. Find what is new
 - Read `.smartreader/library.json` for titles and slugs.
 - Find the newest `createdAt` among lines in `knowledge/prompts.jsonl` with `"by":"distill"` (none → everything is new).
-- For each book, read `.smartreader/books/<slug>/highlights.json` and keep highlights with `deleted: false` and `createdAt` after that time. If there are none, say so and stop.
+- For each book, read `.smartreader/books/<slug>/highlights.json` and keep highlights and notes (`kind: "note"`) with `deleted: false` and `createdAt` after that time. If there are none, say so and stop.
 - Tell the user: "N new highlights in M books. Distilling." Then ask **one** question: "Anything you want me to focus on, or is your purpose for any of these books Explore / Understand / Master?" Do not wait more than one turn; default to Understand.
 
 ## 2. Group into concepts
+- Notes (`kind: "note"`) are the learner's own thoughts, not source claims. Cluster them with the idea they touch, but record them under "In my words" as `Learner's note (h_…): …` or as an open question; never under "What the sources say".
 - Cluster highlights by idea, not by chapter. One concept = one claim, mechanism, distinction or procedure the learner would want to retrieve.
 - Before creating a concept, search existing notes: `grep -ril "<key term>" knowledge/concepts`. Reuse or extend existing notes instead of duplicating.
 - Concept slug: lowercase kebab, ≤5 words (`loss-aversion`, `deliberate-practice`).
@@ -48,7 +49,7 @@ Rules: every claim under "What the sources say" cites a highlight id. Each conne
 Frontmatter `title`, `author`, `slug`, `purpose` (explore/understand/master), `updated`. Sections: **Thesis (one sentence, cite highlights)**, **Key concepts** (`[[links]]`), **Highlights not yet distilled** (ids, if any were skipped as low value).
 
 ## 5. Write better review questions
-For the **most valuable** highlights only (about 1 in 2 or fewer; skip anecdotes and trivia), append to `knowledge/prompts.jsonl`:
+For the **most valuable** highlights only (a note can get a question too, e.g. to test the idea it records; use the note's id) (about 1 in 2 or fewer; skip anecdotes and trivia), append to `knowledge/prompts.jsonl`:
 `{"highlightId":"h_…","question":"…","answer":"…","createdAt":"<now ISO>","by":"distill"}`
 Question quality: answerable without seeing the passage; does not leak the answer; asks why/how/when/compare rather than "what is"; one target per question; the answer is 1–3 sentences grounded in the highlight. Technical books: mechanism or what-if. General non-fiction: claim + reason, or application.
 

@@ -7,7 +7,7 @@ const card = (over: Partial<CardState>): CardState => ({
   bookId: 'b1', due: '2026-10-20T08:00:00', stability: 1, difficulty: 1, elapsed_days: 0, scheduled_days: 0,
   learning_steps: 0, reps: 1, lapses: 0, state: 2, last_review: '', suspended: false, ...over
 })
-const log = (ts: string): ReviewLogEntry => ({ ts, highlightId: 'h', bookId: 'b1', rating: 'good', promptType: 'cloze', durationMs: 1, retrievabilityBefore: 0, wasNew: false })
+const log = (ts: string): ReviewLogEntry => ({ ts, highlightId: 'h', bookId: 'b1', rating: 'good', promptType: 'highlight', durationMs: 1, retrievabilityBefore: 0, wasNew: false })
 
 it('builds forecast, streak, minutes, trend and per-book counts', () => {
   const s = buildStats({

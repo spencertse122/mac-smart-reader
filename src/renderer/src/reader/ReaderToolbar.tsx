@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { ChevronLeft, List, Type } from 'lucide-react'
+import { ChevronLeft, List, NotebookPen, Type } from 'lucide-react'
 import { ReaderSettingsMenu } from './ReaderSettingsMenu'
 
-export function ReaderToolbar({ title, chapter, onBack, onToc, tocOpen = false, onMenuChange }: {
+export function ReaderToolbar({ title, chapter, onBack, onToc, onNote, tocOpen = false, onMenuChange }: {
   title: string
   chapter: string
   onBack(): void
   onToc(): void
+  onNote(): void
   tocOpen?: boolean
   onMenuChange?(open: boolean): void
 }) {
@@ -30,6 +31,9 @@ export function ReaderToolbar({ title, chapter, onBack, onToc, tocOpen = false, 
       <div className="reader-toolbar-side end">
         <button className={`reader-tool icon ${tocOpen ? 'active' : ''}`} onClick={onToc} data-testid="reader-toc" title="Contents" aria-label="Contents">
           <List size={17} />
+        </button>
+        <button className="reader-tool icon" onClick={onNote} data-testid="reader-note" title="New note (⇧⌘N)" aria-label="New note">
+          <NotebookPen size={17} />
         </button>
         <div className="reader-menu-anchor">
           <button

@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
-import { BarChart3, BookOpen, FolderOpen, Highlighter, Layers } from 'lucide-react'
+import { useEffect, type ReactNode } from 'react'
+import { BarChart3, BookMarked, BookOpen, FolderOpen, Highlighter, Layers } from 'lucide-react'
 import { useAppState, type SidebarTab } from '../state/appState'
-import { chooseAndOpenLibrary } from '../state/actions'
+import { chooseAndOpenLibrary, refreshBooks } from '../state/actions'
+import { latestOpenedBook } from '../library/metadata'
 import { HighlightsPanel } from './HighlightsPanel'
 
 export function Sidebar() {
@@ -20,10 +21,22 @@ export function Sidebar() {
       {extra}
     </button>
   )
+  // Opening a book and reading both update the persisted book record; pick that up whenever the view changes.
+  const viewName = state.view.name
+  useEffect(() => { if (state.root) void refreshBooks(dispatch).catch(() => undefined) }, [viewName, readerBookId, state.root, dispatch])
+  const latest = latestOpenedBook(state.books)
   const folder = state.root?.split('/').filter(Boolean).pop() ?? ''
   return (
     <aside className="sidebar">
       <nav className="sidebar-nav">
+        {latest && (
+          <button className={`sidebar-item ${readerBookId === latest.id ? 'active' : ''}`} title={`Continue Reading: ${latest.title} (⌘B)`}
+            onClick={() => dispatch({ type: 'navigate', view: { name: 'reader', bookId: latest.id } })} onMouseUp={e => e.currentTarget.blur()} data-testid="nav-continue">
+            <BookMarked size={16} />
+            <span className="continue-title">{latest.title}</span>
+            <span className="continue-pct">{Math.round(latest.progress * 100)}%</span>
+          </button>
+        )}
         {item('library', 'Library', <BookOpen size={16} />)}
         {item('highlights', 'Highlights', <Highlighter size={16} />)}
         {item('review', 'Review', <Layers size={16} />, state.dueCount > 0 ? <span className="badge" data-testid="due-badge">{state.dueCount}</span> : undefined)}

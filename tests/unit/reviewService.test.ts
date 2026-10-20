@@ -38,12 +38,12 @@ beforeEach(async () => {
 })
 
 describe('ReviewService', () => {
-  it('creates a New card for each highlight and builds cloze cards', async () => {
+  it('creates a New card for each highlight and builds highlight cards', async () => {
     const q = await service().queue()
     expect(q.map(c => c.highlightId)).toEqual(['h_1', 'h_2'])
     expect(q[0]).toMatchObject({
-      bookId: 'b1', bookTitle: 'Title b1', chapter: 'C', location: 'cfi-h_1', promptType: 'cloze',
-      prompt: 'ctx ▁▁▁▁ (~2 words) end', answer: 'text h_1', isNew: true, aiAnswer: null
+      bookId: 'b1', bookTitle: 'Title b1', chapter: 'C', location: 'cfi-h_1', promptType: 'highlight',
+      prompt: 'text h_1', answer: 'text h_1', note: null, isNew: true, aiAnswer: null
     })
     const state = JSON.parse(await readFile(join(dataDir, 'review-state.json'), 'utf8'))
     expect(state.desiredRetention).toBe(0.9)
@@ -58,20 +58,46 @@ describe('ReviewService', () => {
 
   it('rate schedules, logs, and removes the card from the immediate queue', async () => {
     const s = service()
-    const entry = await s.rate('h_1', 'good', 4200.6, 'cloze')
-    expect(entry).toMatchObject({ highlightId: 'h_1', bookId: 'b1', rating: 'good', promptType: 'cloze', durationMs: 4201, retrievabilityBefore: 0, wasNew: true })
+    const entry = await s.rate('h_1', 'good', 4200.6, 'highlight')
+    expect(entry).toMatchObject({ highlightId: 'h_1', bookId: 'b1', rating: 'good', promptType: 'highlight', durationMs: 4201, retrievabilityBefore: 0, wasNew: true })
     const log = (await readFile(join(dataDir, 'review-log.jsonl'), 'utf8')).trim().split('\n')
     expect(log).toHaveLength(1)
     expect((await s.queue()).map(c => c.highlightId)).toEqual(['h_2'])
+    // no learning steps: a good card is not shown again minutes (or hours) later
     clock = new Date(clock.getTime() + 60 * 60 * 1000)
-    expect((await s.queue()).map(c => c.highlightId)).toEqual(['h_1', 'h_2'])
+    expect((await s.queue()).map(c => c.highlightId)).toEqual(['h_2'])
+    const st = await s.cards()
+    expect(new Date(st['h_1'].due).getTime() - clock.getTime()).toBeGreaterThan(23 * 3600 * 1000)
+  })
+
+  it('again clamps due to at most one day, even for a stable review card', async () => {
+    const s = service()
+    await s.rate('h_1', 'easy', 1, 'highlight')
+    clock = new Date('2027-03-01T12:00:00')
+    await s.rate('h_1', 'good', 1, 'highlight')
+    const goodDue = new Date((await s.cards())['h_1'].due).getTime() - clock.getTime()
+    expect(goodDue).toBeGreaterThan(24 * 3600 * 1000)
+    clock = new Date('2027-09-01T12:00:00')
+    await s.rate('h_1', 'again', 1, 'highlight')
+    const due = new Date((await s.cards())['h_1'].due).getTime() - clock.getTime()
+    expect(due).toBeLessThanOrEqual(24 * 3600 * 1000)
+    expect(due).toBeGreaterThan(0)
+  })
+
+  it('note items become note cards (answer = note text) and can carry AI questions', async () => {
+    books = [{ bookId: 'b1', highlights: [hl('n_1', { kind: 'note', note: 'my thought', quote: { exact: '', prefix: '', suffix: '' } })] }]
+    prompts.set('n_1', { highlightId: 'n_1', question: 'What did I think?' })
+    const s = service()
+    expect((await s.queue())[0]).toMatchObject({ promptType: 'ai', prompt: 'What did I think?', answer: 'my thought', note: null })
+    prompts.clear()
+    expect((await s.queue())[0]).toMatchObject({ promptType: 'note', prompt: 'my thought', answer: 'my thought', note: null })
   })
 
   it('due review cards come first, ordered by lowest retrievability', async () => {
     books = [{ bookId: 'b1', highlights: [hl('h_a'), hl('h_b'), hl('h_new')] }]
     const s = service()
-    await s.rate('h_a', 'easy', 1, 'cloze')
-    await s.rate('h_b', 'hard', 1, 'cloze')
+    await s.rate('h_a', 'easy', 1, 'highlight')
+    await s.rate('h_b', 'hard', 1, 'highlight')
     clock = new Date('2026-12-31T12:00:00')
     const q = await s.queue()
     expect(q.slice(0, 2).map(c => c.highlightId).sort()).toEqual(['h_a', 'h_b'])
@@ -84,10 +110,12 @@ describe('ReviewService', () => {
     books = [{ bookId: 'b1', highlights: [hl('h_1'), hl('h_2'), hl('h_3')] }]
     const s = service()
     expect((await s.queue()).map(c => c.highlightId)).toEqual(['h_1'])
-    await s.rate('h_1', 'good', 1, 'cloze')
+    await s.rate('h_1', 'good', 1, 'highlight')
     expect(await s.queue()).toEqual([])
     expect(await s.dueCount()).toBe(0)
     clock = new Date('2026-10-21T12:00:00')
+    expect((await s.queue()).map(c => c.highlightId)).toEqual(['h_2'])
+    clock = new Date('2026-10-25T12:00:00')
     expect((await s.queue()).map(c => c.highlightId)).toEqual(['h_1', 'h_2'])
   })
 
@@ -100,7 +128,7 @@ describe('ReviewService', () => {
   })
 
   it('rate on unknown card rejects', async () => {
-    await expect(service().rate('h_zzz', 'good', 1, 'cloze')).rejects.toThrow('No card')
+    await expect(service().rate('h_zzz', 'good', 1, 'highlight')).rejects.toThrow('No card')
   })
 
   it('reports prompt issues', async () => {

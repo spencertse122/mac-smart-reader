@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { HIGHLIGHT_COLORS, LIMITS, type Highlight, type HighlightPatch, type HighlightsFile, type NewHighlight } from '../../shared/types'
+import { HIGHLIGHT_COLORS, LIMITS, type Highlight, type HighlightPatch, type HighlightsFile, type NewHighlight, type NewNote } from '../../shared/types'
 import { jsonFile, type JsonFile } from '../store/jsonFile'
 import { readJson, writeFileAtomic } from '../store/atomic'
 import { renderHighlightsMarkdown } from './markdown'
@@ -83,6 +83,31 @@ export class HighlightStore {
     return { ...h, quote: { ...h.quote } }
   }
 
+  async addNote(bookId: string, input: NewNote): Promise<Highlight> {
+    const text = input.text.trim()
+    if (!text) throw new HighlightError('Note is empty')
+    if (text.length > LIMITS.noteMaxChars) throw new HighlightError('Note is too long')
+    const ts = this.now().toISOString()
+    const h: Highlight = {
+      id: `h_${randomUUID()}`,
+      kind: 'note',
+      location: input.location || '',
+      quote: { exact: '', prefix: '', suffix: '' },
+      context: '',
+      chapter: input.chapter,
+      position: Math.min(1, Math.max(0, input.position || 0)),
+      color: 'yellow',
+      note: text,
+      createdAt: ts,
+      updatedAt: ts,
+      deleted: false
+    }
+    await this.mutate(bookId, d => {
+      d.highlights.push(h)
+    })
+    return { ...h, quote: { ...h.quote } }
+  }
+
   async update(bookId: string, id: string, patch: HighlightPatch): Promise<Highlight> {
     if (patch.color && !HIGHLIGHT_COLORS.includes(patch.color)) throw new HighlightError(`Unknown color: ${patch.color}`)
     let result: Highlight | undefined
@@ -90,7 +115,14 @@ export class HighlightStore {
       const h = d.highlights.find(x => x.id === id && !x.deleted)
       if (!h) throw new HighlightError(`Highlight not found: ${id}`)
       if (patch.color) h.color = patch.color
-      if (patch.note !== undefined) h.note = patch.note?.trim() || null
+      if (patch.note !== undefined) {
+        const note = patch.note?.trim() || null
+        if (h.kind === 'note') {
+          if (!note) throw new HighlightError('Note is empty')
+          if (note.length > LIMITS.noteMaxChars) throw new HighlightError('Note is too long')
+        }
+        h.note = note
+      }
       if (patch.location) h.location = patch.location
       h.updatedAt = this.now().toISOString()
       result = { ...h }

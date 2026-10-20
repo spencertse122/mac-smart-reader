@@ -3,6 +3,7 @@ export interface ReaderEvents {
   'highlights-changed': { bookId: string }
   activity: { bookId: string }
   closed: { bookId: string }
+  'new-note': Record<string, never>
 }
 
 const bus = new EventTarget()

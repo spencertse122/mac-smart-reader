@@ -23,6 +23,9 @@ export function buildMenu(send: (a: MenuAction) => void, recent: string[]): Menu
     {
       label: 'View',
       submenu: [
+        { label: 'New Note', accelerator: 'Shift+CmdOrCtrl+N', click: () => send({ type: 'new-note' }) },
+        { label: 'Continue Reading', accelerator: 'CmdOrCtrl+B', click: () => send({ type: 'continue-reading' }) },
+        { type: 'separator' },
         { label: 'Toggle Terminal', accelerator: 'CmdOrCtrl+J', click: () => send({ type: 'toggle-terminal' }) },
         { label: 'Start/Pause Pomodoro', accelerator: 'Alt+CmdOrCtrl+P', click: () => send({ type: 'toggle-pomodoro' }) },
         { type: 'separator' },

@@ -31,6 +31,7 @@ const api: SmartReaderApi = {
   highlights: {
     list: bookId => invoke(IPC.highlightsList, bookId),
     add: (bookId, h) => invoke(IPC.highlightsAdd, bookId, h),
+    addNote: (bookId, n) => invoke(IPC.highlightsAddNote, bookId, n),
     update: (bookId, id, patch) => invoke(IPC.highlightsUpdate, bookId, id, patch),
     remove: (bookId, id) => invoke(IPC.highlightsRemove, bookId, id)
   },

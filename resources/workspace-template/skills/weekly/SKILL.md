@@ -7,7 +7,7 @@ description: Weekly learning review — synthesize ideas across the week's readi
 
 Follow `../learning-coach/SKILL.md`.
 
-1. **Gather the week** (last 7 days): reading minutes per book from `.smartreader/sessions.jsonl`; new highlights; review counts and `again` rate from `.smartreader/review-log.jsonl`; coach-log entries.
+1. **Gather the week** (last 7 days): reading minutes per book from `.smartreader/sessions.jsonl`; new highlights and notes; review counts and `again` rate from `.smartreader/review-log.jsonl`; coach-log entries.
 2. **Show a 4-line snapshot:** minutes read, highlights added, reviews done (with the share of `again` ratings), concepts that moved status.
 3. **Cross-book synthesis (1 question).** Pick two concepts from different books that plausibly interact. Ask the learner how they relate *before* offering your view. Tag the result `authors-agree` or `ai-suggested-analogy`.
 4. **Cue-free test of older material (2–3 questions).** Pick high-value concepts last studied 2+ weeks ago. Ask without naming the book or showing a highlight. Score and log (`"skill":"weekly"`).

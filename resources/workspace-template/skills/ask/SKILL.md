@@ -10,7 +10,7 @@ Follow `../learning-coach/SKILL.md`. This skill is **read-only**. Do not write f
 1. **Search broadly, fast.** `grep -ril "<terms and synonyms>" knowledge/ .smartreader/books/*/highlights.md`. Follow `[[links]]` one hop from the matching concepts.
 2. **Answer in layers**, short:
    - **You've demonstrated:** concepts with status `recalled`/`transfer` (cite the coach-log date).
-   - **You've read and highlighted:** relevant highlights with book title and id (quote ≤1 line each).
+   - **You've read and highlighted:** relevant highlights with book title and id (quote ≤1 line each). Notes (`kind: "note"`) go under a separate **Your own notes** line, labelled as the learner's thoughts, not the book's.
    - **Connections:** links between books, each tagged `authors-agree` or `ai-suggested-analogy`.
    - **Gaps:** what the sources don't cover or where the learner's notes are uncertain.
 3. Never present an AI inference as something the learner's books say.

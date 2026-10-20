@@ -9,7 +9,7 @@ Follow `../learning-coach/SKILL.md` strictly. The book stays closed: ask the use
 
 ## Select material
 - Default: highlights created today, or since the last `recall` entry in `knowledge/coach-log.jsonl`, for the book they name.
-- Read them from `.smartreader/books/<slug>/highlights.json` and the related concept notes. **Do not show them to the user.**
+- Read them from `.smartreader/books/<slug>/highlights.json` (items with `kind: "note"` are the learner's own notes; cite them as "your note", not as the book) and the related concept notes. **Do not show them to the user.**
 
 ## Sequence (one question per turn)
 1. **Free recall.** "Without looking, what were the main ideas you highlighted in <chapter>?" Wait. Ask for confidence 1–5.

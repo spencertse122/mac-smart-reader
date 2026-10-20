@@ -28,8 +28,11 @@ export const HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'p
 
 export interface TextQuote { exact: string; prefix: string; suffix: string }
 
+export type HighlightKind = 'highlight' | 'note'
+
 export interface Highlight {
   id: string
+  kind?: HighlightKind // absent = 'highlight'; a 'note' has an empty quote and its text in `note`
   location: string // CFI
   quote: TextQuote
   context: string
@@ -43,11 +46,12 @@ export interface Highlight {
 }
 
 export type NewHighlight = Pick<Highlight, 'location' | 'quote' | 'context' | 'chapter' | 'position' | 'color' | 'note'>
+export type NewNote = { location: string; chapter: string | null; position: number; text: string }
 export type HighlightPatch = Partial<Pick<Highlight, 'color' | 'note' | 'location'>>
 
 export interface HighlightsFile { version: 1; bookId: string; highlights: Highlight[] }
 
-export const LIMITS = { contextChars: 600, quoteAffixChars: 64, exactMaxChars: 3000 } as const
+export const LIMITS = { contextChars: 600, quoteAffixChars: 64, exactMaxChars: 3000, noteMaxChars: 5000 } as const
 
 export type FsrsState = 0 | 1 | 2 | 3 // ts-fsrs State: New, Learning, Review, Relearning
 
@@ -69,7 +73,8 @@ export interface CardState {
 export interface ReviewStateFile { version: 1; desiredRetention: number; cards: Record<string, CardState> }
 
 export type Rating = 'again' | 'hard' | 'good' | 'easy'
-export type PromptType = 'ai' | 'note' | 'cloze'
+// 'cloze' only appears in old review-log lines; new code never produces it
+export type PromptType = 'ai' | 'highlight' | 'note' | 'cloze'
 
 export interface ReviewLogEntry {
   ts: string

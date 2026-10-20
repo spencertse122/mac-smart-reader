@@ -11,10 +11,12 @@ test('stats page renders KPIs and charts after a review', async () => {
       location: 'epubcfi(/6/4)', quote: { exact: 'all warfare', prefix: '', suffix: '' }, context: 'all warfare is deception',
       chapter: null, position: 0, color: 'yellow', note: null
     })
-    await window.api.review.rate(h.id, 'good', 2000, 'cloze')
+    await window.api.review.rate(h.id, 'good', 2000, 'highlight')
   })
   await page.getByTestId('nav-stats').click()
   await expect(page.getByTestId('kpi-rate')).toBeVisible()
+  await expect(page.getByText('Fresh in mind').first()).toBeVisible()
+  await expect(page.getByTestId('status-rate')).toHaveAttribute('title', /Fresh items per hour/)
   await expect(page.locator('[data-testid="view-stats"] svg').first()).toBeVisible()
   await expect(page.getByTestId('status-rate')).toBeVisible()
   await app.close()
