@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { contentFrame, launchApp, makeLibrary, openBook } from './helpers'
 
 test('EPUB: read, highlight, persist across restart, review card appears', async () => {
@@ -63,4 +65,18 @@ test('reading position is restored', async () => {
   const after = await page.evaluate(async b => (await window.api.library.list()).find(x => x.id === b)!.progress, id)
   expect(after).toBeGreaterThan(0)
   await app.close()
+})
+
+test('quitting right after turning pages keeps the latest position', async () => {
+  const library = await makeLibrary()
+  const { app, page } = await launchApp({ library })
+  const id = await openBook(page, 'epub')
+  await contentFrame(page)
+  await page.waitForTimeout(1500) // let the debounced save settle
+  const settled = await page.evaluate(async b => (await window.api.library.list()).find(x => x.id === b)!.location, id)
+  for (let i = 0; i < 4; i++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(120) }
+  await app.close() // like ⌘Q, well inside the 1 s save debounce
+  const lib = JSON.parse(await readFile(join(library, '.smartreader/library.json'), 'utf8'))
+  expect(lib.books[id].location).toMatch(/^epubcfi\(/)
+  expect(lib.books[id].location).not.toBe(settled)
 })

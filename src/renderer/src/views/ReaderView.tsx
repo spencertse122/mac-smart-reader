@@ -583,6 +583,12 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     window.addEventListener('wheel', winWheel, { passive: true })
     cleanups.push(() => window.removeEventListener('keydown', winKey))
     cleanups.push(() => window.removeEventListener('wheel', winWheel))
+    // ⌘Q/⌘W close the window without unmounting React, so flush the debounced position here too.
+    const onUnload = (): void => void flushSave()
+    window.addEventListener('pagehide', onUnload)
+    window.addEventListener('beforeunload', onUnload)
+    cleanups.push(() => window.removeEventListener('pagehide', onUnload))
+    cleanups.push(() => window.removeEventListener('beforeunload', onUnload))
 
     // 13. Navigation requests from the highlights panel, review, etc.
     cleanups.push(onReader('goto', ({ target }) => {

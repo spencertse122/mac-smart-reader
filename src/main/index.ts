@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { IPC } from '../shared/ipc'
 import { SettingsStore } from './settings'
 import { PtyService } from './pty/ptyService'
-import { registerIpc } from './ipc'
+import { registerIpc, type IpcHandle } from './ipc'
 import { buildMenu } from './menu'
 import { setRecoveryListener } from './store/atomic'
 
@@ -87,19 +87,22 @@ function templateDir(): string {
   return app.isPackaged ? join(process.resourcesPath, 'workspace-template') : join(app.getAppPath(), 'resources', 'workspace-template')
 }
 
+let ipcHandle: IpcHandle | null = null
+let draining = false
+
 async function bootstrap(): Promise<void> {
   registerAppProtocol()
   const send = (channel: string, ...args: unknown[]): void => mainWindow?.webContents.send(channel, ...args)
   const settings = new SettingsStore(app.getPath('userData'))
   const pty = new PtyService(send)
   const setMenu = (recent: string[]): void => Menu.setApplicationMenu(buildMenu(a => send(IPC.eventMenu, a), recent))
-  const ipc = registerIpc({
+  const ipc = (ipcHandle = registerIpc({
     getWindow: () => mainWindow,
     settings,
     templateDir: templateDir(),
     pty,
     onSettingsChanged: s => setMenu(s.recentLibraries)
-  })
+  }))
   setRecoveryListener(e =>
     send(IPC.eventToast, {
       kind: 'warning',
@@ -125,3 +128,11 @@ async function bootstrap(): Promise<void> {
 app.whenReady().then(bootstrap)
 
 app.on('window-all-closed', () => app.quit())
+
+// Let writes the closing window just requested (its last reading position) finish before exiting.
+app.on('will-quit', e => {
+  if (draining || !ipcHandle?.busy()) return
+  e.preventDefault()
+  draining = true
+  void ipcHandle.drain().finally(() => app.quit())
+})
