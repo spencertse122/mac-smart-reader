@@ -45,7 +45,8 @@ main() {
   esac
 
   TMP="$(mktemp -d)"
-  trap 'hdiutil detach "$TMP/mnt" -quiet >/dev/null 2>&1 || true; rm -rf "$TMP"' EXIT
+  # Preserve the exit status: macOS's bash 3.2 otherwise exits with the trap's last command status.
+  trap 'rc=$?; hdiutil detach "$TMP/mnt" -quiet >/dev/null 2>&1 || true; rm -rf "$TMP"; exit $rc' EXIT
 
   say "Downloading the latest Smart Reader for $ARCH…"
   if ! download_with_gh && ! download_with_curl; then
