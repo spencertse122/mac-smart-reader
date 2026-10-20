@@ -64,8 +64,6 @@ function Shell() {
         else if (a.type === 'toggle-pomodoro') pomodoro.current.toggle()
         else if (a.type === 'new-note') {
           if (viewName.current === 'reader') emitReader('new-note', {})
-        } else if (a.type === 'continue-reading') {
-          // handled by the Continue Reading feature
         }
       })
     ]

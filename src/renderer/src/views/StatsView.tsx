@@ -46,7 +46,7 @@ export function StatsView() {
               <Kpi label="Streak" value={`${stats.streakDays} ${stats.streakDays === 1 ? 'day' : 'days'}`} sub="consecutive days" />
             </div>
             <p className="stats-explainer">
-              Fresh in mind = how many of your highlights and notes are likely still fresh, based on when you last saw them. Reading adds items; reviewing keeps them fresh.
+              Fresh in mind = how many of your highlights and notes are likely still fresh, based on when you last saw them in Review. Each item starts counting after its first review; reviewing keeps it fresh.
             </p>
             <section className="card stats-card">
               <h2>Fresh in mind over time</h2>
