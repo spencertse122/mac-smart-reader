@@ -1,6 +1,6 @@
 import type { Rating, ReviewCard } from '../../../shared/types'
 
-const TAGS = { ai: 'AI question', note: 'Your question', cloze: 'Fill in the blank' } as const
+const TAGS = { ai: 'AI question', highlight: 'Highlight', note: 'Your note', cloze: 'Highlight' } as const
 const RATINGS: Array<{ rating: Rating; label: string; key: number }> = [
   { rating: 'again', label: 'Again', key: 1 },
   { rating: 'hard', label: 'Hard', key: 2 },

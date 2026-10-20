@@ -4,7 +4,9 @@ import { localDay } from '../../shared/dates'
 import { jsonFile, type JsonFile } from '../store/jsonFile'
 import { appendJsonl, readJsonl } from '../store/jsonl'
 import { newCardState, retrievability, schedule } from './scheduler'
-import { buildPrompt } from './cards'
+import { buildPrompt, cardSource } from './cards'
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 export interface HighlightSource {
   listAllBooks(): Promise<Array<{ bookId: string; highlights: Highlight[] }>>
@@ -100,8 +102,7 @@ export class ReviewService {
         chapter: h.chapter,
         location: h.location,
         ...buildPrompt(h, this.deps.prompts.get(id)),
-        answer: h.quote.exact,
-        note: h.note,
+        ...cardSource(h),
         isNew: st.cards[id].state === 0
       })
     }
@@ -130,7 +131,11 @@ export class ReviewService {
         retrievabilityBefore: Math.round(before * 1000) / 1000,
         wasNew: c.state === 0
       }
-      d.cards[highlightId] = schedule(c, rating, now, d.desiredRetention)
+      const next = schedule(c, rating, now, d.desiredRetention)
+      // "Sooner" must come back within a day, however stable the card was
+      const cap = new Date(now.getTime() + DAY_MS)
+      if (rating === 'again' && new Date(next.due) > cap) next.due = cap.toISOString()
+      d.cards[highlightId] = next
     })
     await appendJsonl(this.logPath, entry)
     return entry!

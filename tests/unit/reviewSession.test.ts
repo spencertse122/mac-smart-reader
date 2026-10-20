@@ -2,8 +2,8 @@ import { it, expect } from 'vitest'
 import { sessionReducer, initialSession, summarize } from '../../src/renderer/src/review/session'
 import type { ReviewCard, ReviewLogEntry } from '../../src/shared/types'
 
-const card = (id: string): ReviewCard => ({ highlightId: id, bookId: 'b', bookTitle: 'B', chapter: null, location: 'cfi', promptType: 'cloze', prompt: 'p', answer: 'a', note: null, aiAnswer: null, isNew: true })
-const entry = (r: number, ms: number): ReviewLogEntry => ({ ts: '', highlightId: 'h', bookId: 'b', rating: 'good', promptType: 'cloze', durationMs: ms, retrievabilityBefore: r, wasNew: false })
+const card = (id: string): ReviewCard => ({ highlightId: id, bookId: 'b', bookTitle: 'B', chapter: null, location: 'cfi', promptType: 'highlight', prompt: 'p', answer: 'a', note: null, aiAnswer: null, isNew: true })
+const entry = (r: number, ms: number): ReviewLogEntry => ({ ts: '', highlightId: 'h', bookId: 'b', rating: 'good', promptType: 'highlight', durationMs: ms, retrievabilityBefore: r, wasNew: false })
 
 it('walks loading → card → reveal → next → done', () => {
   let s = sessionReducer(initialSession, { type: 'loaded', cards: [card('1'), card('2')], now: 1000 })

@@ -3,7 +3,7 @@ import { appendFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { launchApp, makeLibrary } from './helpers'
 
-test('review a cloze card, then an AI question written by an agent appears', async () => {
+test('review a highlight card, then an AI question written by an agent appears', async () => {
   const library = await makeLibrary()
   const { app, page } = await launchApp({ library })
   await page.getByTestId('nav-review').waitFor()

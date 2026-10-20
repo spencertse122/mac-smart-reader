@@ -12,7 +12,7 @@ const schedulers = new Map<number, FSRS>()
 function scheduler(retention: number): FSRS {
   let s = schedulers.get(retention)
   if (!s) {
-    s = fsrs(generatorParameters({ request_retention: retention, enable_fuzz: false }))
+    s = fsrs(generatorParameters({ request_retention: retention, enable_fuzz: false, learning_steps: [], relearning_steps: [] }))
     schedulers.set(retention, s)
   }
   return s

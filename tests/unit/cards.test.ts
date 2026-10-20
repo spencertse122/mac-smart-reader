@@ -1,5 +1,5 @@
 import { it, expect } from 'vitest'
-import { makeCloze, buildPrompt } from '../../src/main/review/cards'
+import { buildPrompt, cardSource } from '../../src/main/review/cards'
 import type { Highlight } from '../../src/shared/types'
 
 const h = (over: Partial<Highlight> = {}): Highlight => ({
@@ -7,36 +7,21 @@ const h = (over: Partial<Highlight> = {}): Highlight => ({
   context: 'Experts rely on deliberate practice to improve.', chapter: 'Ch 2', position: 0.2,
   color: 'yellow', note: null, createdAt: '', updatedAt: '', deleted: false, ...over
 })
+const note = (text: string): Highlight => h({ kind: 'note', note: text, quote: { exact: '', prefix: '', suffix: '' }, context: '' })
 
-it('blanks the highlight inside its context with a word count', () => {
-  expect(makeCloze('Experts rely on deliberate practice to improve.', 'deliberate practice'))
-    .toBe('Experts rely on ▁▁▁▁ (~2 words) to improve.')
-  expect(makeCloze('A word here.', 'word')).toBe('A ▁▁▁▁ (~1 word) here.')
+it('prompt priority: ai > note > highlight', () => {
+  const ai = { highlightId: 'h_1', question: 'Why practice?', answer: 'Because.' }
+  expect(buildPrompt(h(), ai)).toEqual({ promptType: 'ai', prompt: 'Why practice?', aiAnswer: 'Because.' })
+  expect(buildPrompt(note('x'), ai).promptType).toBe('ai')
+  expect(buildPrompt(note(' my thought '))).toEqual({ promptType: 'note', prompt: 'my thought', aiAnswer: null })
+  expect(buildPrompt(h())).toEqual({ promptType: 'highlight', prompt: 'deliberate practice', aiAnswer: null })
 })
 
-it('long highlights keep the first 6 words as a cue', () => {
-  const words = Array.from({ length: 45 }, (_, i) => `w${i}`).join(' ')
-  expect(makeCloze(`Start ${words} end`, words)).toBe('Start w0 w1 w2 w3 w4 w5 ▁▁▁▁ (~39 more words) end')
+it('a highlight note ending in ? no longer becomes the prompt', () => {
+  expect(buildPrompt(h({ note: 'What makes it deliberate?' }))).toEqual({ promptType: 'highlight', prompt: 'deliberate practice', aiAnswer: null })
 })
 
-it('matches across whitespace differences', () => {
-  expect(makeCloze('one  two\nthree four', 'two three')).toBe('one ▁▁▁▁ (~2 words) four')
-})
-
-it('matches case-insensitively', () => {
-  expect(makeCloze('Sun Tzu said: All warfare is based on deception.', 'all warfare is based on deception'))
-    .toBe('Sun Tzu said: ▁▁▁▁ (~6 words).')
-})
-
-it('cloze falls back when quote not in context', () => {
-  expect(makeCloze('unrelated context', 'missing words')).toBe('▁▁▁▁ (~2 words)')
-})
-
-it('prompt priority: ai > note question > cloze', () => {
-  expect(buildPrompt(h(), { highlightId: 'h_1', question: 'Why practice?', answer: 'Because.' }))
-    .toEqual({ promptType: 'ai', prompt: 'Why practice?', aiAnswer: 'Because.' })
-  expect(buildPrompt(h({ note: ' What makes practice deliberate? ' })))
-    .toEqual({ promptType: 'note', prompt: 'What makes practice deliberate?', aiAnswer: null })
-  expect(buildPrompt(h({ note: 'just a note' })).promptType).toBe('cloze')
-  expect(buildPrompt(h({ note: 'just a note' })).prompt).toBe('Experts rely on ▁▁▁▁ (~2 words) to improve.')
+it('card source: highlight keeps quote + own note; note item is its text', () => {
+  expect(cardSource(h({ note: 'mine' }))).toEqual({ answer: 'deliberate practice', note: 'mine' })
+  expect(cardSource(note('my thought'))).toEqual({ answer: 'my thought', note: null })
 })

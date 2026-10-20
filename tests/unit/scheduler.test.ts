@@ -9,10 +9,10 @@ it('new card is New, due at creation, zero retrievability', () => {
   expect(retrievability(c, t0)).toBe(0)
 })
 
-it('good on a new card moves to learning; repeated good reaches review with growing intervals', () => {
+it('good on a new card goes straight to review (no learning steps); repeated good grows intervals', () => {
   let c = newCardState('b1', t0)
   c = schedule(c, 'good', t0)
-  expect(c.state).toBe(1)
+  expect(c.state).toBe(2)
   expect(c.reps).toBe(1)
   expect(c.last_review).toBe(t0.toISOString())
   let now = new Date(c.due)
@@ -22,6 +22,13 @@ it('good on a new card moves to learning; repeated good reaches review with grow
   now = new Date(c.due)
   c = schedule(c, 'good', now)
   expect(new Date(c.due).getTime() - now.getTime()).toBeGreaterThan(firstInterval)
+})
+
+it('no learning steps: a good new card is due days later, not minutes', () => {
+  const c = schedule(newCardState('b1', t0), 'good', t0)
+  expect(new Date(c.due).getTime() - t0.getTime()).toBeGreaterThanOrEqual(86400000)
+  const a = schedule(newCardState('b1', t0), 'again', t0)
+  expect(new Date(a.due).getTime() - t0.getTime()).toBeGreaterThanOrEqual(86400000)
 })
 
 it('again on a review card increments lapses; retrievability decays over time', () => {

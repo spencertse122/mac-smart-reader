@@ -14,6 +14,7 @@ export const IPC = {
   librarySetStatus: 'library:setStatus',
   highlightsList: 'highlights:list',
   highlightsAdd: 'highlights:add',
+  highlightsAddNote: 'highlights:addNote',
   highlightsUpdate: 'highlights:update',
   highlightsRemove: 'highlights:remove',
   reviewQueue: 'review:queue',

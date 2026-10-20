@@ -93,6 +93,11 @@ export function registerIpc(ctx: IpcContext): IpcHandle {
     reviewChanged()
     return r
   })
+  handle(IPC.highlightsAddNote, async (bookId: string, n) => {
+    const r = await need().highlights.addNote(bookId, n)
+    reviewChanged()
+    return r
+  })
   handle(IPC.highlightsUpdate, async (bookId: string, id: string, patch) => {
     const r = await need().highlights.update(bookId, id, patch)
     reviewChanged()

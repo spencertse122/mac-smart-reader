@@ -1,5 +1,5 @@
 import type {
-  Book, BookStatus, Highlight, HighlightPatch, NewHighlight, PromptIssues, PromptType,
+  Book, BookStatus, Highlight, HighlightPatch, NewHighlight, NewNote, PromptIssues, PromptType,
   Rating, ReviewCard, ReviewLogEntry, SessionEntry, Settings, Stats, Toast
 } from './types'
 
@@ -10,6 +10,8 @@ export type MenuAction =
   | { type: 'open-library'; path: string }
   | { type: 'toggle-terminal' }
   | { type: 'toggle-pomodoro' }
+  | { type: 'new-note' }
+  | { type: 'continue-reading' }
 
 export interface SmartReaderApi {
   settings: {
@@ -32,6 +34,7 @@ export interface SmartReaderApi {
   highlights: {
     list(bookId: string): Promise<Highlight[]>
     add(bookId: string, h: NewHighlight): Promise<Highlight>
+    addNote(bookId: string, n: NewNote): Promise<Highlight>
     update(bookId: string, id: string, patch: HighlightPatch): Promise<Highlight>
     remove(bookId: string, id: string): Promise<void>
   }

@@ -10,6 +10,12 @@ export function renderHighlightsMarkdown(book: { title: string; author: string }
       lines.push(`## ${ch}`, '')
       chapter = ch
     }
+    if (h.kind === 'note') {
+      const [first, ...rest] = (h.note ?? '').trim().split('\n')
+      lines.push(`**Note:** ${first}`, ...rest.map(l => `  ${l}`))
+      lines.push(`- id: ${h.id} · note · ${h.createdAt.slice(0, 10)}`, '')
+      continue
+    }
     lines.push(...h.quote.exact.trim().split('\n').map(l => `> ${l}`))
     lines.push(`- id: ${h.id} · color: ${h.color} · ${h.createdAt.slice(0, 10)}`)
     if (h.note) lines.push(`- note: ${h.note.replace(/\n/g, ' ')}`)
