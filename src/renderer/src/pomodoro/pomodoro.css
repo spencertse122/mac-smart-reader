@@ -1,0 +1,21 @@
+.pomo { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.pomo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.pomo-dot.break { background: var(--success); }
+.pomo-time { font-variant-numeric: tabular-nums; }
+.pomo-pop {
+  position: absolute; left: 0; bottom: calc(100% + 8px); width: 220px; padding: 12px; z-index: 900;
+  background: var(--bg-elevated); border-radius: var(--radius); box-shadow: var(--shadow-l); color: var(--text);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pomo-pop label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pomo-pop input[type=number] { width: 56px; }
+.pomo-pop .row { display: flex; gap: 8px; }
+.break-overlay {
+  position: fixed; inset: 0; z-index: 800; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .35); backdrop-filter: blur(6px); animation: break-fade 400ms ease-out;
+}
+.break-card { background: var(--bg-elevated); border-radius: var(--radius-l); box-shadow: var(--shadow-l); padding: 28px 36px; text-align: center; min-width: 300px; }
+.break-card h2 { font-family: var(--font-serif); font-size: 24px; font-weight: 600; margin: 0 0 8px; }
+.break-time { font-size: 40px; font-variant-numeric: tabular-nums; margin-bottom: 12px; }
+.break-actions { display: flex; gap: 10px; justify-content: center; }
+@keyframes break-fade { from { opacity: 0 } to { opacity: 1 } }
