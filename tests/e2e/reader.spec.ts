@@ -5,7 +5,8 @@ async function openBook(page: Page, format: string): Promise<string> {
   // The library opens asynchronously after launch; the shell appears once it is ready.
   await expect(page.getByTestId('app-shell')).toBeVisible()
   const id = await page.evaluate(async f => (await window.api.library.list()).find(b => b.format === f)!.id, format)
-  await page.locator(`[data-book-id="${id}"]`).click()
+  // An opened book appears in both Continue Reading and All Books.
+  await page.locator(`[data-book-id="${id}"]`).first().click()
   await expect(page.getByTestId('view-reader')).toBeVisible()
   return id
 }
