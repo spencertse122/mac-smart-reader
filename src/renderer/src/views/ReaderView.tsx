@@ -45,6 +45,14 @@ const norm = (s: string): string => s.replace(/\s+/g, ' ').trim()
 const isTyping = (t: EventTarget | null): boolean =>
   t instanceof Element && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || (t as HTMLElement).isContentEditable)
 
+function safeResolve(view: FoliateView, cfi: string): ReturnType<FoliateView['resolveNavigation']> {
+  try {
+    return view.resolveNavigation(cfi)
+  } catch {
+    return undefined
+  }
+}
+
 // Viewport rect of a range inside a book iframe.
 function viewportRect(range: Range): DOMRect {
   const r = range.getBoundingClientRect()
@@ -134,9 +142,100 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
 
     const highlightsChanged = (): void => emitReader('highlights-changed', { bookId })
 
+    // Fixed-layout (PDF) fallback: foliate's fxl renderer emits `load` per page but has no Overlayer
+    // (no create-overlayer, no show-annotation), so highlights are drawn as divs inside each page doc.
+    const fxlPages = new Map<Document, number>()
+    const fxlHits = new Map<Document, Array<{ value: string; range: Range; rects: DOMRect[] }>>()
+
+    const drawFxlPage = (doc: Document, index: number): void => {
+      if (!view || !doc.body) return
+      doc.querySelector('.sr-hl-layer')?.remove()
+      const de = doc.documentElement
+      const origin = de.getBoundingClientRect()
+      // pdf.js scales <html> by 1/devicePixelRatio; convert viewport rects back to layout px.
+      const scale = de.offsetWidth ? origin.width / de.offsetWidth : 1
+      const layer = doc.createElement('div')
+      layer.className = 'sr-hl-layer'
+      Object.assign(layer.style, { position: 'absolute', left: '0', top: '0', width: '0', height: '0', pointerEvents: 'none', zIndex: '1' })
+      const hits: Array<{ value: string; range: Range; rects: DOMRect[] }> = []
+      for (const [value, h] of byValue.current) {
+        const resolved = safeResolve(view, h.location)
+        if (!resolved || resolved.index !== index) continue
+        let range: Range | null = null
+        try {
+          range = resolved.anchor(doc)
+        } catch {
+          range = null
+        }
+        if (!range || typeof range.getClientRects !== 'function') continue
+        const rects = [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0)
+        if (!rects.length) continue
+        hits.push({ value, range, rects })
+        const group = doc.createElement('div')
+        group.dataset.value = value
+        Object.assign(group.style, { opacity: '0.35', mixBlendMode: 'multiply' })
+        for (const r of rects) {
+          const d = doc.createElement('div')
+          Object.assign(d.style, {
+            position: 'absolute',
+            left: `${(r.left - origin.left) / scale}px`,
+            top: `${(r.top - origin.top) / scale}px`,
+            width: `${r.width / scale}px`,
+            height: `${r.height / scale}px`,
+            background: HIGHLIGHT_FILL[h.color],
+            borderRadius: '2px'
+          })
+          group.append(d)
+        }
+        layer.append(group)
+      }
+      fxlHits.set(doc, hits)
+      if (layer.childElementCount) doc.body.append(layer)
+    }
+
+    const redrawFxl = (): void => {
+      for (const [doc, index] of fxlPages) {
+        if (!doc.defaultView) {
+          fxlPages.delete(doc)
+          fxlHits.delete(doc)
+        } else drawFxlPage(doc, index)
+      }
+    }
+
+    const setupFxlPage = (doc: Document, index: number): void => {
+      fxlPages.set(doc, index)
+      // The pdf.js text layer renders after `load` and again on every zoom/resize; redraw when it settles.
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const schedule = (): void => {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          if (!disposed && doc.defaultView) drawFxlPage(doc, index)
+        }, 60)
+      }
+      const textLayer = doc.querySelector('.textLayer')
+      if (textLayer) new MutationObserver(schedule).observe(textLayer, { childList: true, subtree: true })
+      schedule()
+      doc.addEventListener('click', e => {
+        if (!doc.getSelection()?.isCollapsed) return
+        const hits = fxlHits.get(doc) ?? []
+        for (let i = hits.length - 1; i >= 0; i--) {
+          const { value, range, rects } = hits[i]
+          if (rects.some(r => r.left <= e.clientX && e.clientX < r.right && r.top <= e.clientY && e.clientY < r.bottom)) {
+            showExisting(value, range)
+            return
+          }
+        }
+      })
+    }
+
     const annotate = (value: string, color: HighlightColor): void => {
-      // Fixed-layout books have no overlayer and foliate throws from addAnnotation there; the highlight is still saved.
-      view?.addAnnotation({ value, color }).catch(() => undefined)
+      if (view?.isFixedLayout) redrawFxl()
+      else view?.addAnnotation({ value, color }).catch(() => undefined)
+    }
+
+    const unannotate = (value: string): void => {
+      if (view?.isFixedLayout) redrawFxl()
+      else view?.deleteAnnotation({ value }).catch(() => undefined)
     }
 
     const closeOverlays = (): boolean => {
@@ -264,8 +363,8 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
           void (async () => {
             try {
               await window.api.highlights.remove(bookId, h.id)
-              view?.deleteAnnotation({ value }).catch(() => undefined)
               byValue.current.delete(value)
+              unannotate(value)
               lostAnchors.delete(h.id)
               setPopup(null)
               highlightsChanged()
@@ -281,6 +380,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     const onLoad = (e: Event): void => {
       const { doc, index } = (e as CustomEvent<{ doc: Document; index: number }>).detail
       docs.current.set(index, doc)
+      if (view?.isFixedLayout) setupFxlPage(doc, index)
       doc.addEventListener('keydown', e => {
         activity(true)
         onKey(e)
