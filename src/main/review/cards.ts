@@ -18,6 +18,8 @@ export function makeCloze(context: string, exact: string): string {
   const ne = norm(ex)
   const j = nc.indexOf(ne)
   if (j >= 0) return nc.slice(0, j) + blank + nc.slice(j + ne.length)
+  const k = nc.toLowerCase().indexOf(ne.toLowerCase())
+  if (k >= 0) return nc.slice(0, k) + blank + nc.slice(k + ne.length)
   return blank
 }
 

@@ -16,3 +16,7 @@
 .term-pane { position: absolute; inset: 0; padding: 6px 0 0 10px; }
 .term-pane.inactive { display: none; }
 .term-pane .xterm { height: 100%; }
+.term-body, .term-pane, .term-pane .xterm, .term-pane .xterm-viewport, .term-pane .xterm-screen { background: #fbfbfd; }
+@media (prefers-color-scheme: dark) {
+  .term-body, .term-pane, .term-pane .xterm, .term-pane .xterm-viewport, .term-pane .xterm-screen { background: #1c1c1e; }
+}

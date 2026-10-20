@@ -14,7 +14,7 @@ export function Sidebar() {
     else dispatch({ type: 'sidebarTab', tab })
   }
   const item = (tab: SidebarTab, label: string, icon: ReactNode, extra?: ReactNode) => (
-    <button className={`sidebar-item ${state.sidebarTab === tab ? 'active' : ''}`} onClick={() => go(tab)} data-testid={`nav-${tab}`}>
+    <button className={`sidebar-item ${state.sidebarTab === tab ? 'active' : ''}`} onClick={() => go(tab)} onMouseUp={e => e.currentTarget.blur()} data-testid={`nav-${tab}`}>
       {icon}
       <span>{label}</span>
       {extra}
