@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useAppState } from './state/appState'
 import { chooseAndOpenLibrary, openLibrary, refreshBooks, refreshDueCount, toast } from './state/actions'
+import { latestOpenedBook } from './library/metadata'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
 import { Toasts } from './components/Toasts'
@@ -30,6 +31,12 @@ function Shell() {
   const viewName = useRef(state.view.name)
   viewName.current = state.view.name
   useReadingTracker()
+  const booksRef = useRef(state.books)
+  booksRef.current = state.books
+  const openLatest = (): void => {
+    const b = latestOpenedBook(booksRef.current)
+    if (b) dispatch({ type: 'navigate', view: { name: 'reader', bookId: b.id } })
+  }
 
   useEffect(() => {
     void (async () => {
@@ -53,6 +60,7 @@ function Shell() {
         if (a.type === 'open-folder') void chooseAndOpenLibrary(dispatch)
         else if (a.type === 'open-library') void openLibrary(dispatch, a.path)
         else if (a.type === 'toggle-terminal') dispatch({ type: 'toggleTerminal' })
+        else if (a.type === 'continue-reading') openLatest()
         else if (a.type === 'toggle-pomodoro') pomodoro.current.toggle()
         else if (a.type === 'new-note') {
           if (viewName.current === 'reader') emitReader('new-note', {})

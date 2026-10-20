@@ -21,3 +21,13 @@ export function filterAndSort(books: Book[], query: string, sort: 'recent' | 'ti
   if (sort === 'author') return list.sort((a, b) => (a.author || '￿').localeCompare(b.author || '￿') || byTitle(a, b))
   return list.sort((a, b) => (b.lastOpenedAt ?? '').localeCompare(a.lastOpenedAt ?? '') || byTitle(a, b))
 }
+
+/** The most recently opened book that can still be opened (the "Continue Reading" target). */
+export function latestOpenedBook(books: Book[]): Book | null {
+  let best: Book | null = null
+  for (const b of books) {
+    if (!b.lastOpenedAt || b.missing || b.status !== 'ok') continue
+    if (!best || b.lastOpenedAt > (best.lastOpenedAt as string)) best = b
+  }
+  return best
+}

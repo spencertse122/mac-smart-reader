@@ -40,16 +40,16 @@ export function StatsView() {
         ) : (
           <>
             <div className="kpi-row">
-              <Kpi label="Retrievable knowledge per hour" value={formatRate(stats.knowledgePerHour)} sub="last 30 days" testId="kpi-rate" />
-              <Kpi label="Retrievable highlights" value={stats.K.toFixed(1)} sub="expected recall today" />
+              <Kpi label="Fresh items per hour" value={formatRate(stats.knowledgePerHour)} sub="last 30 days" testId="kpi-rate" />
+              <Kpi label="Fresh in mind" value={stats.K.toFixed(1)} sub="items likely still fresh today" />
               <Kpi label="Due today" value={String(stats.dueToday)} sub="cards" />
               <Kpi label="Streak" value={`${stats.streakDays} ${stats.streakDays === 1 ? 'day' : 'days'}`} sub="consecutive days" />
             </div>
             <p className="stats-explainer">
-              Retrievable knowledge = how many of your highlights you'd likely recall right now (FSRS). Reading alone doesn't raise it; reviewing does.
+              Fresh in mind = how many of your highlights and notes are likely still fresh, based on when you last saw them. Reading adds items; reviewing keeps them fresh.
             </p>
             <section className="card stats-card">
-              <h2>Retrievable knowledge over time</h2>
+              <h2>Fresh in mind over time</h2>
               <LineChart height={200} points={stats.kTrend.map(p => ({ label: shortDate(p.date), value: p.K }))} />
             </section>
             <section className="card stats-card">
