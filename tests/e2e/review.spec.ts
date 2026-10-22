@@ -74,3 +74,29 @@ test('note cards show the note text immediately', async () => {
   await expect(page.getByTestId('review-done')).toBeVisible()
   await app.close()
 })
+
+test('due badge catches up when cards become due while the app stays open', async () => {
+  const library = await makeLibrary()
+  const { app, page } = await launchApp({ library })
+  await page.getByTestId('nav-review').waitFor()
+  await page.evaluate(async () => {
+    const book = (await window.api.library.list()).find(b => b.format === 'epub')!
+    const h = await window.api.highlights.addNote(book.id, { location: '', chapter: null, position: 0, text: 'tomorrow' })
+    await window.api.review.queue()
+    await window.api.review.rate(h.id, 'good', 1000, 'note')
+  })
+  await expect(page.getByTestId('due-badge')).toHaveCount(0)
+  // three days pass with the app left open: the card is now due, but nothing in the app changed
+  await app.evaluate(() => {
+    const Real = Date
+    const shift = 3 * 24 * 60 * 60 * 1000
+    class Later extends Real {
+      constructor(...a: unknown[]) { if (a.length) super(...(a as [number])); else super(Real.now() + shift) }
+      static now(): number { return Real.now() + shift }
+    }
+    globalThis.Date = Later as DateConstructor
+  })
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(page.getByTestId('due-badge')).toHaveText('1')
+  await app.close()
+})

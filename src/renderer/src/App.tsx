@@ -71,6 +71,21 @@ function Shell() {
     return () => offs.forEach(off => off())
   }, [dispatch])
 
+  // Cards fall due and the daily new-card quota resets with the clock alone, so recount
+  // when the app comes back (e.g. after the Mac slept overnight) and once a minute.
+  useEffect(() => {
+    if (!state.root) return
+    const refresh = (): void => { if (document.visibilityState === 'visible') void refreshDueCount(dispatch) }
+    const timer = setInterval(refresh, 60_000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [dispatch, state.root])
+
   if (state.status === 'loading') return <div className="welcome" />
   if (!state.root) return (<><Welcome /><Toasts /></>)
 
