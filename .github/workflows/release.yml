@@ -54,6 +54,34 @@ jobs:
           echo "dict-lookup serendipity -> exit $CODE: ${OUT:0:200}"
           if [[ $CODE -eq 1 ]]; then echo "::warning::dict-lookup found no definition (no dictionary assets on this runner?)"; fi
           if [[ $CODE -ge 2 ]]; then exit 1; fi
+      - name: Check Chinese lookups against the real Oxford Chinese Dictionary
+        run: |
+          H="$(ls -d release/mac-arm64/*.app)/Contents/Resources/bin/dict-lookup"
+          set +e
+          "$H" --zh serendipity; echo "before install -> exit $? (3 = not downloaded is expected)"
+          set -e
+          # Install the dictionary the way Dictionary.app would, from Apple's asset catalog.
+          URL="$(python3 - <<'PY'
+          import glob, plistlib
+          p = glob.glob('/System/Library/AssetsV2/com_apple_MobileAsset_DictionaryServices_dictionaryOSX/*.xml')
+          a = [x for x in plistlib.load(open(p[0], 'rb'))['Assets'] if x.get('DictionaryIdentifier') == 'com.apple.dictionary.zh_CN-en.OCD'] if p else []
+          b = max(a, key=lambda x: x.get('_CompatibilityVersion', 0)) if a else None
+          print(b['__BaseURL'] + b['__RelativePath'] if b else '')
+          PY
+          )"
+          if [[ -z "$URL" ]] || ! curl -fsSL "$URL" -o "$RUNNER_TEMP/ocd.zip"; then
+            echo "::warning::could not download the Oxford Chinese Dictionary; Chinese lookup not verified"; exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/ocd" ~/Library/Dictionaries
+          unzip -q "$RUNNER_TEMP/ocd.zip" -d "$RUNNER_TEMP/ocd"
+          cp -R "$RUNNER_TEMP"/ocd/AssetData/*.dictionary ~/Library/Dictionaries/
+          OUT="$("$H" --zh serendipity)"; echo "${OUT:0:200}"
+          grep -q "机缘凑巧" <<<"$OUT"
+          set +e; "$H" --zh qwertyzx; CODE=$?; set -e
+          echo "--zh qwertyzx -> exit $CODE"; test "$CODE" -eq 1
+          # English lookups must still come from NOAD with the Chinese dictionary installed
+          EN="$("$H" serendipity)"; echo "${EN:0:120}"
+          grep -q "ser·en·dip" <<<"$EN"
       - name: Smoke-launch the packaged arm64 app
         run: |
           APP_BIN="$(ls -d release/mac-arm64/*.app)/Contents/MacOS/Smart Reader"
