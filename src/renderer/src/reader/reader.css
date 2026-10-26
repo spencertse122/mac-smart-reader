@@ -214,6 +214,11 @@
 .hl-lookup { width: 300px; padding: 8px 6px 4px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; }
 .hl-lookup-head { display: flex; align-items: baseline; gap: 8px; }
 .hl-lookup-head b { font-family: var(--font-serif); font-size: 17px; }
+.hl-lookup-zhwrap { display: flex; align-items: baseline; gap: 8px; }
+.hl-lookup-zh { font-size: 15px; line-height: 1.4; font-weight: 500; user-select: text; }
+.hl-lookup-more { flex: none; border: 0; background: transparent; color: var(--accent); font: 12px var(--font-ui); padding: 0; cursor: default; }
+.hl-lookup-zhentry { max-height: 160px; overflow-y: auto; white-space: pre-line; user-select: text; font-size: 12px; color: var(--text-2); }
+.hl-lookup-hint { font-size: 12px; }
 .hl-lookup-def { max-height: 240px; overflow-y: auto; white-space: pre-wrap; user-select: text; }
 .hl-lookup-sentence { font-size: 12px; font-style: italic; }
 .hl-lookup-saved { font-size: 11px; color: var(--success); }

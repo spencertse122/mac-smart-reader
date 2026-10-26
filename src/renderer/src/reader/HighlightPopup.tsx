@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { BookA, Copy, NotebookPen, Trash2 } from 'lucide-react'
-import { HIGHLIGHT_COLORS, type DictEntry, type Highlight, type HighlightColor } from '../../../shared/types'
+import { HIGHLIGHT_COLORS, type DictEntry, type Highlight, type HighlightColor, type ZhResult } from '../../../shared/types'
 import { Emphasized } from '../vocab/Emphasized'
 
 interface Common {
@@ -10,7 +10,7 @@ interface Common {
 }
 
 export type LookUpOutcome =
-  | { ok: true; entry: DictEntry; sentence: string; saved: boolean }
+  | { ok: true; entry: DictEntry; zh: ZhResult; sentence: string; saved: boolean }
   | { ok: false; reason: 'not-found' | 'unavailable' }
 
 export type PopupState =
@@ -29,10 +29,12 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
   useLayoutEffect(() => onDraft?.(editNote), [])
   const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null)
   const [look, setLook] = useState<'idle' | 'busy' | LookUpOutcome>('idle')
+  const [zhMore, setZhMore] = useState(false)
   const lookTerm = state.mode === 'new' ? state.term : null
   const runLookUp = (): void => {
     if (state.mode !== 'new' || look === 'busy') return
     setLook('busy')
+    setZhMore(false)
     state.onLookUp().then(setLook, () => setLook({ ok: false, reason: 'unavailable' }))
   }
   const current = state.mode === 'edit' ? state.highlight.color : null
@@ -134,6 +136,16 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
                 <b data-testid="hl-lookup-headword">{look.entry.headword}</b>
                 {look.entry.pronunciation && <span className="muted">/{look.entry.pronunciation}/</span>}
               </div>
+              {look.zh.status === 'ok' && (
+                <div className="hl-lookup-zhwrap">
+                  <div className="hl-lookup-zh" data-testid="lookup-zh">{look.zh.gloss}</div>
+                  <button className="hl-lookup-more" onClick={() => setZhMore(m => !m)} aria-expanded={zhMore} data-testid="lookup-zh-more">{zhMore ? 'Less' : 'More'}</button>
+                </div>
+              )}
+              {look.zh.status === 'ok' && zhMore && <div className="hl-lookup-zhentry" data-testid="lookup-zh-entry">{look.zh.entry}</div>}
+              {look.zh.status === 'unavailable' && (
+                <div className="hl-lookup-hint muted" data-testid="lookup-zh-hint">For Chinese, turn on 'Simplified Chinese – English' in Dictionary → Settings.</div>
+              )}
               <div className="hl-lookup-def" data-testid="hl-lookup-def">{look.entry.text}</div>
               {look.sentence && (
                 <div className="hl-lookup-sentence muted">

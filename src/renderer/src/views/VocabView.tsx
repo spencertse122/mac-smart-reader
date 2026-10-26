@@ -12,6 +12,7 @@ export function VocabView() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [zhOpen, setZhOpen] = useState<string | null>(null)
 
   const load = useCallback(() => { void window.api.vocab.list().then(setWords).catch(() => setWords([])) }, [])
   useEffect(() => {
@@ -22,7 +23,7 @@ export function VocabView() {
   const title = useMemo(() => new Map(state.books.map(b => [b.id, b.title])), [state.books])
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return (words ?? []).filter(w => !q || w.headword.toLowerCase().includes(q) || w.definition.toLowerCase().includes(q))
+    return (words ?? []).filter(w => !q || w.headword.toLowerCase().includes(q) || w.definition.toLowerCase().includes(q) || (w.zh ?? '').toLowerCase().includes(q))
   }, [words, query])
 
   const remove = (id: string): void => {
@@ -57,6 +58,7 @@ export function VocabView() {
                     <span className="vocab-head">
                       <b className="vocab-word" data-testid="vocab-headword">{w.headword}</b>
                       {w.pronunciation && <span className="muted">/{w.pronunciation}/</span>}
+                      {w.zh && <span className="vocab-zh" data-testid="vocab-zh">{w.zh}</span>}
                     </span>
                     <span className={`vocab-def ${expanded ? 'full' : ''}`} data-testid="vocab-def">{w.definition}</span>
                     {!expanded && newest && (
@@ -78,6 +80,14 @@ export function VocabView() {
                     </button>
                   )}
                 </div>
+                {expanded && w.zhEntry && (
+                  <div className="vocab-zhmore">
+                    <button className="vocab-more" onClick={() => setZhOpen(zhOpen === w.id ? null : w.id)} aria-expanded={zhOpen === w.id} data-testid="vocab-zh-more">
+                      {zhOpen === w.id ? 'Less' : 'More'}
+                    </button>
+                    {zhOpen === w.id && <div className="vocab-zhentry" data-testid="vocab-zh-entry">{w.zhEntry}</div>}
+                  </div>
+                )}
                 {expanded && (
                   <div className="vocab-contexts">
                     {w.contexts.slice().reverse().map((c, i) => (

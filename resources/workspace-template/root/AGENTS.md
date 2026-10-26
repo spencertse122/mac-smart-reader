@@ -18,7 +18,7 @@ This folder is a **Smart Reader** library: the user's non-fiction ebooks, their 
 | `.smartreader/books/<slug>/highlights.json` | app — read only | full records: `id`, `kind` (absent = highlight, `"note"` = the learner's own note: text in `note`, empty `quote.exact`), `quote.exact`, `context`, `chapter`, `note`, `createdAt`, `deleted` |
 | `.smartreader/review-state.json` | app — read only | FSRS state per highlight id (`state` 0 new/1 learning/2 review/3 relearning, `lapses`, `due`) |
 | `.smartreader/review-log.jsonl` | app — read only | every flashcard review: `highlightId`, `rating` (`again` = the learner pressed Sooner, `good` = Next; older lines may also have hard/easy), `ts` |
-| `.smartreader/vocab.md` | app — read only | words the learner looked up: headword, pronunciation, definition, the sentences they met it in (with book), id |
+| `.smartreader/vocab.md` | app — read only | words the learner looked up: headword, pronunciation, definition, the sentences they met it in (with book), id; an entry may also have a `中文：` line with the Simplified Chinese gloss |
 | `.smartreader/vocab.json` | app — read only | full word records (`id` `w_…`, `headword`, `definition`, `contexts[]`, `deleted`); word ids are also review-state/review-log keys |
 | `.smartreader/sessions.jsonl` | app — read only | reading/review minutes |
 | `knowledge/index.md` | you | entry point: books, core concepts, weak spots, recent sessions |

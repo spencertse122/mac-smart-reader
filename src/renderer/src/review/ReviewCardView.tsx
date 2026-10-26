@@ -55,6 +55,7 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
             <>
               <hr className="review-sep" />
               {card.pronunciation && <div className="review-pron muted" data-testid="review-pron">/{card.pronunciation}/</div>}
+              {card.zh && <div className="review-zh" data-testid="review-zh">{card.zh}</div>}
               <div className="review-def" data-testid="review-def">{card.answer}</div>
               {card.context && (
                 <blockquote className="review-quote review-context" data-testid="review-context">

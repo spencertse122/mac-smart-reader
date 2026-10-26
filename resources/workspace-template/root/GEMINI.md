@@ -19,6 +19,7 @@ This folder is a **Smart Reader** library: the user's non-fiction ebooks, their 
 | `.smartreader/review-state.json` | app — read only | FSRS state per highlight id (`state` 0 new/1 learning/2 review/3 relearning, `lapses`, `due`) |
 | `.smartreader/review-log.jsonl` | app — read only | every flashcard review: `highlightId`, `rating` (`again` = the learner pressed Sooner, `good` = Next; older lines may also have hard/easy), `ts` |
 | `.smartreader/sessions.jsonl` | app — read only | reading/review minutes |
+| `.smartreader/vocab.md` | app — read only | words the learner looked up: headword, pronunciation, definition, the sentences they met it in (with book), id; an entry may also have a `中文：` line with the Simplified Chinese gloss |
 | `knowledge/index.md` | you | entry point: books, core concepts, weak spots, recent sessions |
 | `knowledge/concepts/<concept-slug>.md` | you | one concept per file (format in the distill skill) |
 | `knowledge/books/<book-slug>.md` | you | one page per book: thesis, key concepts, links |

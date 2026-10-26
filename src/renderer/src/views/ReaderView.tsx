@@ -340,12 +340,13 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
               headword: r.entry.headword,
               pronunciation: r.entry.pronunciation,
               definition: r.entry.text,
+              ...(r.zh.status === 'ok' ? { zh: r.zh.gloss, zhEntry: r.zh.entry } : r.zh.status === 'not-found' ? { zh: null, zhEntry: null } : {}),
               context: { bookId, sentence, location: view!.getCFI(index, range), chapter: position.current.chapter || null }
             })
-            return { ok: true, entry: r.entry, sentence, saved: true }
+            return { ok: true, entry: r.entry, zh: r.zh, sentence, saved: true }
           } catch (err) {
             toast(dispatch, 'error', `Could not save word: ${(err as Error).message}`)
-            return { ok: true, entry: r.entry, sentence, saved: false }
+            return { ok: true, entry: r.entry, zh: r.zh, sentence, saved: false }
           }
         },
         onCopy: () => {
