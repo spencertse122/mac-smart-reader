@@ -69,4 +69,54 @@ describe('VocabStore', () => {
     expect(md).toContain(`- id: ${a.id} · added 2026-10-20`)
     expect(md).not.toContain('gone')
   })
+  it('stores zh and never overwrites it with undefined; null only fills a blank', async () => {
+    const a = await store.save(input({ zh: '机缘凑巧', zhEntry: 'full' }))
+    expect(a).toMatchObject({ zh: '机缘凑巧', zhEntry: 'full' })
+    const b = await store.save(input({}, 'Again.'))
+    expect(b).toMatchObject({ zh: '机缘凑巧', zhEntry: 'full' })
+    const c = await store.save(input({ zh: null, zhEntry: null }, 'Third.'))
+    expect(c).toMatchObject({ zh: '机缘凑巧', zhEntry: 'full' })
+    const d = await store.save(input({ headword: 'plain' }))
+    expect(d.zh).toBeUndefined()
+    const e = await store.save(input({ headword: 'plain', zh: null, zhEntry: null }))
+    expect(e.zh).toBeNull()
+    expect((await store.save(input({ headword: 'plain', zh: '素' }))).zh).toBe('素')
+    expect(await readFile(join(dir, 'vocab.md'), 'utf8')).toContain('中文：机缘凑巧')
+  })
+  it('backfills zh: ok, not-found, and stops at unavailable', async () => {
+    await store.save(input({ headword: 'one' }, 's1'))
+    await store.save(input({ headword: 'two' }, 's2'))
+    await store.save(input({ headword: 'three' }, 's3'))
+    await store.save(input({ headword: 'four' }, 's4'))
+    await store.save(input({ headword: 'done', zh: 'x' }, 's5'))
+    const seen: string[] = []
+    const changed = await store.backfillZh(async t => {
+      seen.push(t)
+      if (t === 'one') return { status: 'ok', gloss: '一', entry: 'e1' }
+      if (t === 'two') return { status: 'not-found' }
+      return { status: 'unavailable' }
+    })
+    expect(changed).toBe(true)
+    expect(seen).toEqual(['one', 'two', 'three'])
+    const by = Object.fromEntries((await store.list()).map(w => [w.headword, w]))
+    expect(by.one).toMatchObject({ zh: '一', zhEntry: 'e1' })
+    expect(by.two.zh).toBeNull()
+    expect(by.three.zh).toBeUndefined()
+    expect(by.four.zh).toBeUndefined()
+    expect(by.done.zh).toBe('x')
+    expect(seen).not.toContain('done')
+    expect(await store.backfillZh(async () => ({ status: 'unavailable' }))).toBe(false)
+  })
+  it('never runs two backfills at once', async () => {
+    await store.save(input())
+    let release!: () => void
+    const gate = new Promise<void>(r => { release = r })
+    let calls = 0
+    const first = store.backfillZh(async () => { calls++; await gate; return { status: 'ok', gloss: 'g', entry: 'e' } })
+    await new Promise(r => setTimeout(r, 20))
+    expect(await store.backfillZh(async () => { calls++; return { status: 'not-found' } })).toBe(false)
+    release()
+    expect(await first).toBe(true)
+    expect(calls).toBe(1)
+  })
 })

@@ -47,8 +47,13 @@ describe('ReviewService with vocabulary', () => {
     expect(q[1]).toMatchObject({
       promptType: 'word', prompt: 'serendipity', answer: 'def of serendipity', pronunciation: 'pron',
       context: 'A serendipity sentence.', bookId: 'b1', bookTitle: 'Title b1', chapter: 'Ch 2', location: 'cfi-w',
-      note: null, aiAnswer: null, isNew: true
+      note: null, aiAnswer: null, isNew: true, zh: null
     })
+  })
+  it('carries the Chinese gloss on word cards', async () => {
+    words = [word('w_1', 'serendipity', '2026-10-20T09:00:00.000Z', { zh: '① 机缘凑巧 ② 巧事' })]
+    const q = await service().queue()
+    expect(q.find(c => c.highlightId === 'w_1')?.zh).toBe('① 机缘凑巧 ② 巧事')
   })
   it('shares the new-card quota with highlights', async () => {
     quota = 1

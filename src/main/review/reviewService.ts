@@ -134,6 +134,7 @@ export class ReviewService {
           note: null,
           aiAnswer: null,
           pronunciation: w.pronunciation,
+          zh: w.zh ?? null,
           context: ctx?.sentence || null,
           isNew: st.cards[id].state === 0
         })

@@ -32,6 +32,17 @@ export function registerIpc(ctx: IpcContext): IpcHandle {
     return ws
   }
   const reviewChanged = (): void => send(IPC.eventReviewChanged)
+  // Fill in Chinese glosses for saved words in the background; never rejects.
+  const backfillZh = (): void => {
+    const w = ws
+    if (!w) return
+    void w.vocab
+      .backfillZh(t => ctx.dictionary.lookupZh(t))
+      .then(changed => {
+        if (changed && ws === w) reviewChanged()
+      })
+      .catch(() => undefined)
+  }
   // Calls still running (e.g. the reader's last saveProgress sent while the window closes); quit waits for them.
   const inflight = new Set<Promise<unknown>>()
   const handle = (channel: string, fn: (...args: any[]) => unknown): void => {
@@ -66,6 +77,7 @@ export function registerIpc(ctx: IpcContext): IpcHandle {
       ws?.close()
       ctx.pty.killAll()
       ws = next
+      backfillZh()
       ctx.onSettingsChanged(await ctx.settings.rememberLibrary(root))
       return { ok: true, root, books: await ws.library.list() }
     } catch (e) {
@@ -110,7 +122,11 @@ export function registerIpc(ctx: IpcContext): IpcHandle {
     reviewChanged()
   })
 
-  handle(IPC.vocabLookup, (term: string) => ctx.dictionary.lookup(String(term ?? '')))
+  handle(IPC.vocabLookup, async (term: string) => {
+    const r = await ctx.dictionary.lookup(String(term ?? ''))
+    if (r.ok && r.zh.status === 'ok') backfillZh()
+    return r
+  })
   handle(IPC.vocabSave, async input => {
     const r = await need().vocab.save(input)
     reviewChanged()

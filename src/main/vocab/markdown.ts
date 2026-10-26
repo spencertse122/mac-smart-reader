@@ -7,6 +7,7 @@ export function renderVocabMarkdown(words: VocabWord[], titleOf: (bookId: string
     lines.push(`## ${w.headword}${w.pronunciation ? ` /${w.pronunciation}/` : ''}`, '')
     const def = w.definition.replace(/\s+/g, ' ').trim()
     lines.push(def.length > 300 ? `${def.slice(0, 300).trimEnd()}…` : def, '')
+    if (w.zh) lines.push(`中文：${w.zh.replace(/\s+/g, ' ').trim()}`, '')
     for (const c of w.contexts) lines.push(`- “${c.sentence.replace(/\s+/g, ' ').trim()}” — ${titleOf(c.bookId)}`)
     lines.push(`- id: ${w.id} · added ${w.createdAt.slice(0, 10)}`, '')
   }

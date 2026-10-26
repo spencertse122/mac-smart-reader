@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { VOCAB_MAX_CONTEXTS, VOCAB_SENTENCE_MAX, type NewVocab, type VocabContext, type VocabFile, type VocabWord } from '../../shared/types'
+import { VOCAB_MAX_CONTEXTS, VOCAB_SENTENCE_MAX, type NewVocab, type VocabContext, type VocabFile, type VocabWord, type ZhResult } from '../../shared/types'
 import { jsonFile, type JsonFile } from '../store/jsonFile'
 import { writeFileAtomic } from '../store/atomic'
 import { renderVocabMarkdown } from './markdown'
@@ -9,6 +9,7 @@ export class VocabError extends Error {}
 
 export class VocabStore {
   private file: JsonFile<VocabFile>
+  private backfilling = false
   private titles = new Map<string, string>()
 
   constructor(
@@ -49,6 +50,8 @@ export class VocabStore {
           headword,
           pronunciation: input.pronunciation,
           definition: input.definition,
+          ...(input.zh !== undefined ? { zh: input.zh } : {}),
+          ...(input.zhEntry !== undefined ? { zhEntry: input.zhEntry } : {}),
           contexts: [],
           createdAt: ts,
           updatedAt: ts,
@@ -60,6 +63,8 @@ export class VocabStore {
         w.pronunciation = input.pronunciation ?? w.pronunciation
         w.definition = input.definition || w.definition
         w.updatedAt = ts
+        if (input.zh !== undefined && (input.zh !== null || w.zh == null)) w.zh = input.zh
+        if (input.zhEntry !== undefined && (input.zhEntry !== null || w.zhEntry == null)) w.zhEntry = input.zhEntry
       }
       if (ctx.bookId && !w.contexts.some(c => c.sentence === ctx.sentence)) {
         w.contexts.push(ctx)
@@ -86,5 +91,35 @@ export class VocabStore {
   // All words including deleted ones, so ReviewService can suspend cards of removed words.
   async listAll(): Promise<VocabWord[]> {
     return (await this.file.read()).words
+  }
+
+  // Fills in the Chinese gloss for words never looked up (zh === undefined). Sequential; stops at the first
+  // 'unavailable' so a later run retries. Returns whether anything changed. Never runs twice at once.
+  async backfillZh(lookup: (term: string) => Promise<ZhResult>): Promise<boolean> {
+    if (this.backfilling) return false
+    this.backfilling = true
+    let changed = false
+    try {
+      const todo = (await this.file.read()).words.filter(w => !w.deleted && w.zh === undefined).map(w => ({ id: w.id, headword: w.headword }))
+      for (const t of todo) {
+        const r = await lookup(t.headword)
+        if (r.status === 'unavailable') break
+        await this.file.update(d => {
+          const w = d.words.find(x => x.id === t.id)
+          if (!w || w.zh !== undefined) return
+          if (r.status === 'ok') {
+            w.zh = r.gloss
+            w.zhEntry = r.entry
+          } else {
+            w.zh = null
+            w.zhEntry = null
+          }
+          changed = true
+        })
+      }
+    } finally {
+      this.backfilling = false
+    }
+    return changed
   }
 }

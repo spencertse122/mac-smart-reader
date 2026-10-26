@@ -59,7 +59,8 @@ export interface DictEntry {
   text: string // definition, display-ready (line breaks before senses/bullets, no etymology tail)
   raw: string
 }
-export type DictLookupResult = { ok: true; entry: DictEntry } | { ok: false; reason: 'not-found' | 'unavailable' }
+export type ZhResult = { status: 'ok'; gloss: string; entry: string } | { status: 'not-found' } | { status: 'unavailable' }
+export type DictLookupResult = { ok: true; entry: DictEntry; zh: ZhResult } | { ok: false; reason: 'not-found' | 'unavailable' }
 
 export interface VocabContext { bookId: string; sentence: string; location: string; chapter: string | null; at: string }
 export interface VocabWord {
@@ -71,12 +72,16 @@ export interface VocabWord {
   createdAt: string
   updatedAt: string
   deleted: boolean
+  zh?: string | null // Chinese gloss; undefined = never looked up, null = looked up, none found
+  zhEntry?: string | null // full Chinese entry text
 }
 export interface VocabFile { version: 1; words: VocabWord[] }
 export interface NewVocab {
   headword: string
   pronunciation: string | null
   definition: string
+  zh?: string | null
+  zhEntry?: string | null
   context: { bookId: string; sentence: string; location: string; chapter: string | null }
 }
 export const VOCAB_MAX_CONTEXTS = 5
@@ -133,6 +138,7 @@ export interface ReviewCard {
   // promptType 'word' only: `highlightId` is the word id, `prompt` the headword, `answer` the definition
   pronunciation?: string | null
   context?: string | null // sentence of the word's first context
+  zh?: string | null // Chinese gloss
 }
 
 export interface PromptIssues { invalidLines: number; unknownHighlightIds: number }
