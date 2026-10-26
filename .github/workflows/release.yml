@@ -63,7 +63,7 @@ jobs:
           # Install the dictionary the way Dictionary.app would, from Apple's asset catalog.
           URL="$(python3 - <<'PY'
           import glob, plistlib
-          p = glob.glob('/System/Library/AssetsV2/com_apple_MobileAsset_DictionaryServices_dictionaryOSX/*.xml')
+          p = glob.glob('/System/Library/AssetsV2/com_apple_MobileAsset_DictionaryServices_dictionary*/*.xml')
           a = [x for x in plistlib.load(open(p[0], 'rb'))['Assets'] if x.get('DictionaryIdentifier') == 'com.apple.dictionary.zh_CN-en.OCD'] if p else []
           b = max(a, key=lambda x: x.get('_CompatibilityVersion', 0)) if a else None
           print(b['__BaseURL'] + b['__RelativePath'] if b else '')
