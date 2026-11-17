@@ -30,8 +30,9 @@ export function jsonFile<T>(
     const now = await statSig()
     // A file that vanished after a cached load keeps the cache.
     if (cache === undefined || (now !== null && now !== sig)) {
+      // Keep the signature from before the read: a swap mid-read then differs next time and reloads.
       cache = await readJson(path, fallback)
-      sig = await statSig()
+      sig = now
     }
     return cache as T
   }

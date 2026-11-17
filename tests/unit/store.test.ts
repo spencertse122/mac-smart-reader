@@ -1,17 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { utimes, stat } from 'node:fs/promises'
-import { mkdtemp, readFile, writeFile, readdir } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, readdir, utimes, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeJson, readJson, setRecoveryListener } from '../../src/main/store/atomic'
-
-const reads = vi.hoisted(() => ({ n: 0 }))
-vi.mock('../../src/main/store/atomic', async orig => {
-  const m = await orig<typeof import('../../src/main/store/atomic')>()
-  return { ...m, readJson: (...a: Parameters<typeof m.readJson>) => { reads.n++; return m.readJson(...a) } }
-})
 import { appendJsonl, readJsonl } from '../../src/main/store/jsonl'
 import { jsonFile } from '../../src/main/store/jsonFile'
+
+const reads = vi.hoisted(() => ({ n: 0, afterRead: null as null | (() => Promise<void>) }))
+vi.mock('../../src/main/store/atomic', async orig => {
+  const m = await orig<typeof import('../../src/main/store/atomic')>()
+  return { ...m, readJson: async (...a: Parameters<typeof m.readJson>) => {
+      reads.n++
+      const v = await m.readJson(...a)
+      await reads.afterRead?.()
+      return v
+    } }
+})
 
 let dir: string
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'sr-store-')) })
@@ -125,5 +129,21 @@ describe('jsonFile external changes', () => {
     const before = reads.n
     await f.read()
     expect(reads.n).toBe(before)
+  })
+})
+
+describe('jsonFile swap during read', () => {
+  it('reloads content swapped on disk while a read was in flight', async () => {
+    const p = join(dir, 'race.json')
+    await writeFile(p, JSON.stringify({ n: 1 }))
+    const f = jsonFile(p, () => ({ n: 0 }))
+    reads.afterRead = async () => {
+      reads.afterRead = null
+      await writeFile(p, JSON.stringify({ n: 2 }))
+      const t = new Date((await stat(p)).mtimeMs + 2000)
+      await utimes(p, t, t)
+    }
+    expect(await f.read()).toEqual({ n: 1 })
+    expect(await f.read()).toEqual({ n: 2 })
   })
 })
