@@ -70,10 +70,15 @@ The web `window.api` runs the **existing main-process services unchanged** (`Lib
 3. `platform: 'mac'` in preload.
 Nothing else changes on the Mac; formats are unchanged.
 
+**Users must update the Mac app to v0.5.0 before using the web app.** v0.4.0 caches each data file for the life of the process and writes that copy back on the next page turn, highlight or review, which overwrites phone edits made since it started. The README says so.
+
+**Known limit (I3):** the Mac side has no merge. If the phone pushes a file and the Mac writes the same file before Google Drive for desktop has downloaded that version (typically a few seconds), the Mac's later write wins on the Mac side, and Drive for desktop then uploads it as the newest revision. The README tells users to give Drive a few seconds when switching devices.
+
 ### Auth and Connect flow (`src/web/auth/`, `src/web/ui/`)
 
 - GIS token client, scope `https://www.googleapis.com/auth/drive openid email`. Signed-out screen: Smart Reader logo + "Continue with Google". The access token and expiry are kept in `sessionStorage` (and the last email in `localStorage` as `login_hint`). On a 401 the sync pauses, writes keep queuing, and a slim banner "Session expired — tap to reconnect" calls `requestAccessToken({ prompt: '' })` from the tap.
 - The renderer's Welcome screen calls `library.chooseFolder()`; on the web this opens a **folder picker sheet**: first, auto-detected Smart Reader libraries (Drive search `name='.smartreader' and mimeType='application/vnd.google-apps.folder' and trashed=false` → their parent folders, shown by name with their path), then a simple Drive folder browser (My Drive, drill into folders, "Use this folder"). It resolves with `/library` after mounting; the folder id is remembered in `localStorage` so the next visit reopens it directly (`settings.libraryPath = '/library'`). A "Switch folder" / "Sign out" entry lives in the web's settings/More screen.
+- Home-screen (standalone) app: the GIS popup does not reliably return on iOS, so sign-in and reconnect use the OAuth 2.0 implicit flow by redirect instead (`response_type=token`, `redirect_uri = <origin>/`, same scope, `include_granted_scopes=true`, `login_hint`, a random `state` in `sessionStorage`). On return the token is taken from the URL fragment after the state check, stored like the GIS token, and the fragment is cleared. Before navigating away the app waits until every edit under way is in the IndexedDB outbox. The redirect URI must be registered on the OAuth client. Sign out revokes the token (best effort).
 - Web `settings` persist in `localStorage` (`sr.web.settings`), same `Settings` shape and defaults; `terminalPosition` and `recentLibraries` are unused.
 
 ### Mobile layout (renderer CSS + small components)
