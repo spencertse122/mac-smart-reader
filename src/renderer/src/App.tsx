@@ -103,27 +103,18 @@ function Shell() {
       {v.name === 'vocab' && <VocabView />}
     </>
   )
-  // Phones get a full-screen view with a bottom tab bar; the reader takes the whole screen.
-  if (mobile) {
-    return (
-      <div className={`app mobile ${v.name === 'reader' ? 'in-reader' : ''}`} data-testid="app-shell">
-        <main className="main">
-          <div className="content">{views}</div>
-        </main>
-        {v.name !== 'reader' && <TabBar />}
-        <Toasts />
-      </div>
-    )
-  }
   const position = state.settings?.terminalPosition ?? 'bottom'
+  // One tree for both layouts, so rotating a phone (which can flip the layout) never remounts the open view.
+  // Phones get a full-screen view with a bottom tab bar; the reader takes the whole screen.
   return (
-    <div className="app" data-testid="app-shell">
-      <Sidebar />
-      <main className={`main term-${position}`}>
+    <div className={mobile ? `app mobile${v.name === 'reader' ? ' in-reader' : ''}` : 'app'} data-testid="app-shell">
+      {!mobile && <Sidebar />}
+      <main className={mobile ? 'main' : `main term-${position}`}>
         <div className="content">{views}</div>
-        {window.api.platform !== 'web' && state.terminalMounted && <TerminalPanel visible={state.terminalOpen} />}
+        {!mobile && window.api.platform !== 'web' && state.terminalMounted && <TerminalPanel visible={state.terminalOpen} />}
       </main>
-      <StatusBar />
+      {!mobile && <StatusBar />}
+      {mobile && v.name !== 'reader' && <TabBar />}
       <Toasts />
     </div>
   )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Highlight, HighlightColor, Settings } from '../../../shared/types'
 import { LIMITS } from '../../../shared/types'
 import { useAppState } from '../state/appState'
@@ -122,15 +122,29 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   popupRef.current = popup
   const noteDraft = useRef('')
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   const showChrome = useCallback((): void => {
     setChrome(true)
     clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => {
-      const o = overlays.current
-      if (!o.popup && !o.toc && !o.menu && !o.composer && !o.sheet) setChrome(false)
-    }, mobileRef.current ? MOBILE_CHROME_HIDE_MS : CHROME_HIDE_MS)
+    const arm = (): void => {
+      hideTimer.current = setTimeout(() => {
+        const o = overlays.current
+        if (o.popup || o.toc || o.menu || o.composer || o.sheet) return
+        // A popover inside the toolbar (Pomodoro options) or a focused field there keeps it up.
+        const bar = rootRef.current?.querySelector('.reader-toolbar')
+        if (mobileRef.current && bar && (bar.querySelector('.pomo-pop') || bar.contains(document.activeElement))) return arm()
+        setChrome(false)
+      }, mobileRef.current ? MOBILE_CHROME_HIDE_MS : CHROME_HIDE_MS)
+    }
+    arm()
   }, [])
+
+  // Phones: any touch on the toolbar (or a sheet opened from it) restarts the auto-hide countdown.
+  const onChromeTouch = useCallback((e: ReactPointerEvent | ReactKeyboardEvent): void => {
+    const t = e.target as Element | null
+    if (t?.closest?.('.reader-toolbar, .sheet') && chromeRef.current) showChrome()
+  }, [showChrome])
 
   // Phones: a tap in the middle of the page shows the toolbar or hides it straight away.
   const toggleChrome = useCallback((): void => {
@@ -504,8 +518,9 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
         setPopup(null)
         const r = view.renderer
         if (!view.isFixedLayout && typeof r.snap === 'function') {
+          const snap = r.snap.bind(r)
           e.stopImmediatePropagation()
-          requestAnimationFrame(() => r.snap!(Math.sign(dx) * 0.6, 0))
+          requestAnimationFrame(() => snap(Math.sign(dx) * 0.6, 0))
         } else void (dx > 0 ? view.goRight() : view.goLeft())
       }, { capture: true })
       doc.addEventListener('pointerdown', () => {
@@ -789,7 +804,10 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     <div
       className={`reader theme-${theme} ${chromeVisible ? '' : 'chrome-hidden'}${mobile ? ' reader-mobile' : ''}`}
       data-testid="view-reader"
+      ref={rootRef}
       onMouseMove={mobile ? undefined : showChrome}
+      onPointerDownCapture={mobile ? onChromeTouch : undefined}
+      onKeyDownCapture={mobile ? onChromeTouch : undefined}
     >
       <ReaderToolbar
         title={book?.title ?? ''}

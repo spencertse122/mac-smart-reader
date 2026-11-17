@@ -52,11 +52,14 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
     const left = Math.min(Math.max(EDGE, center - width / 2), window.innerWidth - width - EDGE)
     if (mobile) {
       // Phones put their own copy/look-up callout above a selection, so ours goes below unless it can't fit.
-      const vh = window.visualViewport?.height ?? window.innerHeight
-      const fitsBelow = r.bottom + GAP + height <= vh - EDGE
-      const below = fitsBelow || r.top - GAP - height < EDGE
-      const top = below ? Math.min(r.bottom + GAP, vh - height - EDGE) : r.top - height - GAP
-      setPos({ left, top: Math.max(EDGE, top), below })
+      // The visible band in layout-viewport coordinates: with the keyboard up, iOS scrolls the visual viewport.
+      const vv = window.visualViewport
+      const minY = (vv?.offsetTop ?? 0) + EDGE
+      const maxY = (vv ? vv.offsetTop + vv.height : window.innerHeight) - EDGE
+      const fitsBelow = r.bottom + GAP + height <= maxY
+      const below = fitsBelow || r.top - GAP - height < minY
+      const top = below ? Math.min(r.bottom + GAP, maxY - height) : r.top - height - GAP
+      setPos({ left, top: Math.max(minY, top), below })
       return
     }
     const below = r.top < 80 + height
@@ -72,7 +75,11 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
     if (!mobile || !vv) return
     const bump = (): void => setVvTick(t => t + 1)
     vv.addEventListener('resize', bump)
-    return () => vv.removeEventListener('resize', bump)
+    vv.addEventListener('scroll', bump)
+    return () => {
+      vv.removeEventListener('resize', bump)
+      vv.removeEventListener('scroll', bump)
+    }
   }, [mobile])
 
   const save = (): void => state.onNote(note.trim())

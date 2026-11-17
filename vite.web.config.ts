@@ -14,7 +14,8 @@ const TYPES: Record<string, string> = {
 // The renderer's public/ is shared with Electron, so web-only files (manifest, home-screen icons)
 // live in src/web/public-extra and are served/copied at the site root by this plugin.
 function publicExtra(): Plugin {
-  const files = () => readdirSync(EXTRA)
+  let cached: string[] | null = null
+  const files = (): string[] => (cached ??= readdirSync(EXTRA))
   return {
     name: 'smart-reader-public-extra',
     configureServer(server) {
