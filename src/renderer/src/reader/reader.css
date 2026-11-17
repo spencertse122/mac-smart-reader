@@ -222,3 +222,5 @@
 .hl-lookup-def { max-height: 240px; overflow-y: auto; white-space: pre-wrap; user-select: text; }
 .hl-lookup-sentence { font-size: 12px; font-style: italic; }
 .hl-lookup-saved { font-size: 11px; color: var(--success); }
+
+.reader-download { position: absolute; left: 0; right: 0; top: 50%; text-align: center; color: var(--r-muted); font-size: 14px; pointer-events: none; }

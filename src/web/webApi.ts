@@ -23,9 +23,16 @@ export interface WebApiDeps {
   // Poll every 30 s while visible and on becoming visible. Off in tests.
   autoPull?: boolean
   now?: () => Date
+  // Subscribes to raw Drive download progress (the app wraps the client's download to feed it).
+  downloadProgress?: (cb: (loaded: number, total: number) => void) => () => void
 }
 
-export type WebApi = SmartReaderApi & { sync(): DriveSync | null; dispose(): void }
+export type WebApi = SmartReaderApi & {
+  sync(): DriveSync | null
+  // Survives folder switches, unlike DriveSync.onAuthError.
+  onAuthError(cb: () => void): () => void
+  dispose(): void
+}
 
 const PULL_INTERVAL_MS = 30_000
 
@@ -35,11 +42,15 @@ export function createWebApi(deps: WebApiDeps): WebApi {
   let mountedId: string | null = null
   let unsubSync: (() => void) | null = null
   let unsubErr: (() => void) | null = null
+  let unsubAuth: (() => void) | null = null
   const subs = {
     review: new Set<() => void>(),
     library: new Set<() => void>(),
-    toast: new Set<(t: Toast) => void>()
+    toast: new Set<(t: Toast) => void>(),
+    auth: new Set<() => void>(),
+    read: new Set<(loaded: number, total: number) => void>()
   }
+  let reading = 0
   const emit = (set: Set<() => void>): void => {
     for (const cb of [...set]) cb()
   }
@@ -87,6 +98,7 @@ export function createWebApi(deps: WebApiDeps): WebApi {
     ws = null
     unsubSync?.()
     unsubErr?.()
+    unsubAuth?.()
     sync?.stop()
     sync = next
     mountedId = f.id
@@ -94,6 +106,7 @@ export function createWebApi(deps: WebApiDeps): WebApi {
       reviewChanged()
       libraryChanged()
     })
+    unsubAuth = next.onAuthError(() => emit(subs.auth))
     unsubErr = next.onSyncError(() => {
       for (const cb of [...subs.toast]) cb({ kind: 'warning', message: "Couldn't sync to Google Drive — will retry." })
     })
@@ -102,6 +115,7 @@ export function createWebApi(deps: WebApiDeps): WebApi {
   const api: WebApi = {
     platform: 'web',
     sync: () => sync,
+    onAuthError: cb => (subs.auth.add(cb), () => void subs.auth.delete(cb)),
     dispose() {
       if (timer) {
         clearInterval(timer)
@@ -109,6 +123,7 @@ export function createWebApi(deps: WebApiDeps): WebApi {
       }
       unsubSync?.()
       unsubErr?.()
+      unsubAuth?.()
       sync?.stop()
       ws?.close()
     },
@@ -153,11 +168,22 @@ export function createWebApi(deps: WebApiDeps): WebApi {
           const hit = await deps.cache.get(key)
           if (hit) return { name: basename(b.path), data: hit }
         }
-        const r = await w.library.readBook(id)
+        const off = deps.downloadProgress?.((l, t) => {
+          if (reading > 0) for (const cb of [...subs.read]) cb(l, t)
+        })
+        reading++
+        let r: { name: string; data: Uint8Array | Buffer }
+        try {
+          r = await w.library.readBook(id)
+        } finally {
+          reading--
+          off?.()
+        }
         const data = new Uint8Array(r.data)
         if (key) await deps.cache.put(key, data)
         return { name: r.name, data }
       },
+      onReadProgress: cb => (subs.read.add(cb), () => void subs.read.delete(cb)),
       getCover: async id => {
         const c = await need().library.getCover(id)
         return c ? new Uint8Array(c) : null

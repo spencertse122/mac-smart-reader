@@ -26,6 +26,8 @@ export interface SmartReaderApi {
     list(): Promise<Book[]>
     rescan(): Promise<Book[]>
     readBook(id: string): Promise<{ name: string; data: Uint8Array }>
+    // Web only: Drive download progress for the book being read.
+    onReadProgress?(cb: (loaded: number, total: number) => void): () => void
     getCover(id: string): Promise<Uint8Array | null>
     saveMetadata(id: string, meta: { title: string; author: string; cover: Uint8Array | null }): Promise<Book>
     saveProgress(id: string, location: string, progress: number): Promise<void>

@@ -92,6 +92,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   const [chrome, setChrome] = useState(true)
   const [ready, setReady] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [dlPct, setDlPct] = useState<number | null>(null)
   const [fixedLayout, setFixedLayout] = useState(false)
 
   // Event handlers are bound once per book, so they read live values through refs.
@@ -121,6 +122,10 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     showChrome()
   }, [popup, tocOpen, menuOpen, composer, showChrome])
   useEffect(() => () => clearTimeout(hideTimer.current), [])
+  useEffect(
+    () => window.api.library.onReadProgress?.((l, t) => setDlPct(t > 0 ? Math.min(100, Math.round((l / t) * 100)) : null)),
+    []
+  )
 
   // 1–13, 15. The foliate view lifecycle for this book.
   useEffect(() => {
@@ -698,6 +703,9 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
         onMenuChange={setMenuOpen}
       />
       <div className={`reader-host${loading ? ' loading' : ''}${invert ? ' invert-pages' : ''}`} ref={hostRef} />
+      {loading && dlPct !== null && dlPct < 100 && (
+        <div className="reader-download" data-testid="download-progress">Downloading book… {dlPct}%</div>
+      )}
       <footer className="reader-footer">
         <span className="reader-footer-chapter">{chapter}</span>
         <span className="reader-progress" aria-hidden>
