@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { BarChart3, BookA, BookMarked, BookOpen, FolderOpen, Highlighter, Layers } from 'lucide-react'
 import { useAppState, type SidebarTab } from '../state/appState'
-import { chooseAndOpenLibrary, refreshBooks } from '../state/actions'
+import { chooseAndOpenLibrary } from '../state/actions'
 import { latestOpenedBook } from '../library/metadata'
 import { HighlightsPanel } from './HighlightsPanel'
+import { useBookRefresh } from './useBookRefresh'
 
 export function Sidebar() {
   const { state, dispatch } = useAppState()
@@ -24,9 +25,7 @@ export function Sidebar() {
       {extra}
     </button>
   )
-  // Opening a book and reading both update the persisted book record; pick that up whenever the view changes.
-  const viewName = state.view.name
-  useEffect(() => { if (state.root) void refreshBooks(dispatch).catch(() => undefined) }, [viewName, readerBookId, state.root, dispatch])
+  useBookRefresh()
   const latest = latestOpenedBook(state.books)
   const folder = state.root?.split('/').filter(Boolean).pop() ?? ''
   return (

@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { BookA, Copy, NotebookPen, Trash2 } from 'lucide-react'
 import { HIGHLIGHT_COLORS, type DictEntry, type Highlight, type HighlightColor, type ZhResult } from '../../../shared/types'
 import { Emphasized } from '../vocab/Emphasized'
+import { useIsMobile } from '../components/useIsMobile'
 
 interface Common {
   rect: DOMRect
@@ -22,6 +23,8 @@ const EDGE = 12
 
 export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState; onClose(): void; onDraft?(note: string): void }) {
   const ref = useRef<HTMLDivElement>(null)
+  const mobile = useIsMobile()
+  const [vvTick, setVvTick] = useState(0)
   const editNote = state.mode === 'edit' ? state.highlight.note ?? '' : ''
   const [noteOpen, setNoteOpen] = useState(editNote !== '')
   const [note, setNote] = useState(editNote)
@@ -45,14 +48,32 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
     if (!el) return
     const { width, height } = el.getBoundingClientRect()
     const r = state.rect
-    const below = r.top < 80 + height
     const center = r.left + r.width / 2
     const left = Math.min(Math.max(EDGE, center - width / 2), window.innerWidth - width - EDGE)
+    if (mobile) {
+      // Phones put their own copy/look-up callout above a selection, so ours goes below unless it can't fit.
+      const vh = window.visualViewport?.height ?? window.innerHeight
+      const fitsBelow = r.bottom + GAP + height <= vh - EDGE
+      const below = fitsBelow || r.top - GAP - height < EDGE
+      const top = below ? Math.min(r.bottom + GAP, vh - height - EDGE) : r.top - height - GAP
+      setPos({ left, top: Math.max(EDGE, top), below })
+      return
+    }
+    const below = r.top < 80 + height
     const top = below
       ? Math.min(r.bottom + GAP, window.innerHeight - height - EDGE)
       : r.top - height - GAP
     setPos({ left, top, below })
-  }, [state.rect, noteOpen, look])
+  }, [state.rect, noteOpen, look, mobile, vvTick])
+
+  // The on-screen keyboard shrinks the visual viewport; re-place so the note field stays visible.
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!mobile || !vv) return
+    const bump = (): void => setVvTick(t => t + 1)
+    vv.addEventListener('resize', bump)
+    return () => vv.removeEventListener('resize', bump)
+  }, [mobile])
 
   const save = (): void => state.onNote(note.trim())
   // Keys typed in the popup must never reach page turning.
@@ -176,7 +197,7 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
             data-testid="hl-note-input"
           />
           <div className="hl-note-actions">
-            <span className="hl-hint">⌘↩ to save</span>
+            <span className="hl-hint">{mobile ? '' : '⌘↩ to save'}</span>
             <button className="btn btn-primary hl-save" onClick={save} data-testid="hl-note-save">Save</button>
           </div>
         </div>

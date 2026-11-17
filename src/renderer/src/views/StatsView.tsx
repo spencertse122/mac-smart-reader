@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import type { Stats } from '../../../shared/types'
 import { BarChart, LineChart } from '../stats/charts'
 import { formatRate } from '../stats/format'
+import { useIsMobile } from '../components/useIsMobile'
+import { AccountButton } from '../components/TabBar'
+import { PomodoroControl } from '../pomodoro/PomodoroProvider'
+import { KnowledgeRate } from '../stats/KnowledgeRate'
 import '../stats/stats.css'
 
 const shortDate = (d: string) => d.slice(5)
@@ -18,6 +22,7 @@ function Kpi({ label, value, sub, testId }: { label: string; value: string; sub:
 
 export function StatsView() {
   const [stats, setStats] = useState<Stats | null>(null)
+  const mobile = useIsMobile()
 
   useEffect(() => {
     let alive = true
@@ -31,6 +36,14 @@ export function StatsView() {
     <div className="stats-view" data-testid="view-stats">
       <div className="stats-inner">
         <h1>Your learning</h1>
+        {mobile && (
+          <div className="stats-tools" data-testid="stats-tools">
+            <PomodoroControl />
+            <KnowledgeRate />
+            <span className="spacer" />
+            <AccountButton />
+          </div>
+        )}
         {!stats ? (
           <>
             <div className="kpi-row">{[0, 1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 96 }} />)}</div>

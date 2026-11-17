@@ -5,6 +5,8 @@ import { DEFAULT_SETTINGS } from '../../../shared/types'
 import { useAppState } from '../state/appState'
 import { updateSettings } from '../state/actions'
 import { READER_THEMES } from './readerStyles'
+import { useIsMobile } from '../components/useIsMobile'
+import { BottomSheet } from '../components/BottomSheet'
 
 const LINE_HEIGHTS = [1.35, 1.55, 1.8]
 const MIN_SIZE = 14
@@ -14,9 +16,12 @@ export function ReaderSettingsMenu({ onClose }: { onClose(): void }) {
   const { state, dispatch } = useAppState()
   const s = state.settings ?? DEFAULT_SETTINGS
   const ref = useRef<HTMLDivElement>(null)
+  const mobile = useIsMobile()
   const set = (patch: Partial<Settings>): void => void updateSettings(dispatch, patch)
 
   useEffect(() => {
+    // On phones the menu is a bottom sheet, which closes itself from its scrim.
+    if (mobile) return
     const onDown = (e: PointerEvent): void => {
       const anchor = ref.current?.parentElement
       if (anchor && !anchor.contains(e.target as Node)) onClose()
@@ -33,13 +38,13 @@ export function ReaderSettingsMenu({ onClose }: { onClose(): void }) {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('blur', onClose)
     }
-  }, [onClose])
+  }, [onClose, mobile])
 
   const segment = <T extends string | number>(value: T, current: T, label: string, onPick: () => void, testId?: string) => (
     <button key={String(value)} className={`seg ${value === current ? 'on' : ''}`} onClick={onPick} data-testid={testId}>{label}</button>
   )
 
-  return (
+  const menu = (
     <div className="reader-menu" ref={ref} role="dialog" aria-label="Appearance" data-testid="reader-settings-menu">
       <div className="reader-menu-themes">
         {(Object.keys(READER_THEMES) as ReaderTheme[]).map(name => {
@@ -79,4 +84,5 @@ export function ReaderSettingsMenu({ onClose }: { onClose(): void }) {
       </div>
     </div>
   )
+  return mobile ? <BottomSheet open onClose={onClose} title="Appearance">{menu}</BottomSheet> : menu
 }

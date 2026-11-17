@@ -15,6 +15,9 @@ import { lostAnchors } from '../reader/lostAnchors'
 import { HighlightPopup, type PopupState } from '../reader/HighlightPopup'
 import { ReaderToolbar } from '../reader/ReaderToolbar'
 import { TocDrawer } from '../reader/TocDrawer'
+import { HighlightsPanel } from '../components/HighlightsPanel'
+import { BottomSheet } from '../components/BottomSheet'
+import { useIsMobile } from '../components/useIsMobile'
 import '../reader/reader.css'
 
 type FoliateView = HTMLElement & {
@@ -30,7 +33,7 @@ type FoliateView = HTMLElement & {
   close(): void
   isFixedLayout: boolean
   book: { toc?: FoliateTocItem[] }
-  renderer: HTMLElement & { setStyles?: (css: string) => void }
+  renderer: HTMLElement & { setStyles?: (css: string) => void; snap?: (vx: number, vy: number) => void }
 }
 
 interface RelocateDetail { fraction?: number; cfi?: string; tocItem?: { label?: string } | null }
@@ -41,6 +44,9 @@ interface DrawDetail {
 
 const SAVE_DEBOUNCE_MS = 1000
 const CHROME_HIDE_MS = 2000
+const MOBILE_CHROME_HIDE_MS = 3000
+const TOUCH_SWIPE_PX = 50
+const TAP_SLOP_PX = 10
 const SWIPE_THRESHOLD = 60
 const SWIPE_WINDOW_MS = 300
 
@@ -64,14 +70,17 @@ function viewportRect(range: Range): DOMRect {
   return new DOMRect(r.left + (f?.left ?? 0), r.top + (f?.top ?? 0), r.width, r.height)
 }
 
-function applySettings(view: FoliateView, s: Settings): void {
-  view.renderer.setStyles?.(readerCss(s))
+// Mobile WebKit "autosizes" text in the wide multi-column book frame, inflating fonts past their line height.
+const MOBILE_BOOK_CSS = '\nhtml, body { -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }'
+
+function applySettings(view: FoliateView, s: Settings, mobile = false): void {
+  view.renderer.setStyles?.(readerCss(s) + (mobile ? MOBILE_BOOK_CSS : ''))
   const r = view.renderer
   r.setAttribute('flow', s.flow)
-  r.setAttribute('margin', '56px')
-  r.setAttribute('gap', '7%')
+  r.setAttribute('margin', mobile ? '36px' : '56px')
+  r.setAttribute('gap', mobile ? '6%' : '7%')
   r.setAttribute('max-inline-size', '680px')
-  r.setAttribute('max-column-count', '2')
+  r.setAttribute('max-column-count', mobile ? '1' : '2')
 }
 
 export function ReaderView({ bookId, target }: { bookId: string; target?: string }) {
@@ -94,13 +103,19 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   const [loading, setLoading] = useState(true)
   const [dlPct, setDlPct] = useState<number | null>(null)
   const [fixedLayout, setFixedLayout] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const mobile = useIsMobile()
+  const mobileRef = useRef(mobile)
+  mobileRef.current = mobile
+  const chromeRef = useRef(chrome)
+  chromeRef.current = chrome
 
   // Event handlers are bound once per book, so they read live values through refs.
   const settingsRef = useRef(state.settings)
   settingsRef.current = state.settings
   const initial = useRef({ location: book?.location ?? null, target })
-  const overlays = useRef({ popup: false, toc: false, menu: false, composer: false })
-  overlays.current = { popup: popup !== null, toc: tocOpen, menu: menuOpen, composer: composer !== null }
+  const overlays = useRef({ popup: false, toc: false, menu: false, composer: false, sheet: false })
+  overlays.current = { popup: popup !== null, toc: tocOpen, menu: menuOpen, composer: composer !== null, sheet: sheetOpen }
   const lastColor = useRef<HighlightColor>('yellow')
   // The popup's note text as typed, so a click back into the book can save it instead of dropping it.
   const popupRef = useRef<PopupState | null>(null)
@@ -113,14 +128,22 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     clearTimeout(hideTimer.current)
     hideTimer.current = setTimeout(() => {
       const o = overlays.current
-      if (!o.popup && !o.toc && !o.menu && !o.composer) setChrome(false)
-    }, CHROME_HIDE_MS)
+      if (!o.popup && !o.toc && !o.menu && !o.composer && !o.sheet) setChrome(false)
+    }, mobileRef.current ? MOBILE_CHROME_HIDE_MS : CHROME_HIDE_MS)
   }, [])
 
+  // Phones: a tap in the middle of the page shows the toolbar or hides it straight away.
+  const toggleChrome = useCallback((): void => {
+    if (!chromeRef.current) return showChrome()
+    clearTimeout(hideTimer.current)
+    setChrome(false)
+  }, [showChrome])
+
   // 14. Keep chrome up while an overlay is open and restart the fade when it closes.
+  // On phones the toolbar only comes back on a tap, so overlays just extend a visible toolbar.
   useEffect(() => {
-    showChrome()
-  }, [popup, tocOpen, menuOpen, composer, showChrome])
+    if (!mobileRef.current || chromeRef.current) showChrome()
+  }, [popup, tocOpen, menuOpen, composer, sheetOpen, showChrome])
   useEffect(() => () => clearTimeout(hideTimer.current), [])
   useEffect(
     () => window.api.library.onReadProgress?.((l, t) => setDlPct(t > 0 ? Math.min(100, Math.round((l / t) * 100)) : null)),
@@ -137,6 +160,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     let pendingSave: { cfi: string; fraction: number } | null = null
     let lastActivity = 0
     const swipe = { acc: 0, last: 0, fired: false }
+    let annotationAt = 0
     const cleanups: Array<() => void> = []
 
     const flushSave = async (): Promise<void> => {
@@ -250,6 +274,8 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       if (view?.isFixedLayout) redrawFxl()
       else view?.deleteAnnotation({ value }).catch(() => undefined)
     }
+
+    const paginated = (): boolean => !!view && (view.isFixedLayout || settingsRef.current?.flow !== 'scrolled')
 
     const closeOverlays = (): boolean => {
       const o = overlays.current
@@ -372,6 +398,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     const showExisting = (value: string, range: Range): void => {
       const h = byValue.current.get(value)
       if (!h) return
+      annotationAt = Date.now()
       const edit = (patch: { color?: HighlightColor; note?: string | null }): void => {
         void (async () => {
           try {
@@ -441,12 +468,81 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       })
       doc.addEventListener('mousemove', () => {
         activity()
-        showChrome()
+        // Touch screens send a synthetic mousemove with every tap, which must not count as "show the toolbar".
+        if (!mobileRef.current) showChrome()
       })
       doc.addEventListener('wheel', e => {
         showChrome()
         onWheel(e)
       }, { passive: true })
+      setupTouch(doc, index)
+    }
+
+    // Phones: tap thirds, swipes and touch selection. Bound for every section, active only on mobile.
+    const setupTouch = (doc: Document, index: number): void => {
+      const win = doc.defaultView
+      if (!win) return
+      const collapsed = (): boolean => doc.getSelection()?.isCollapsed ?? true
+      let start: { x: number; y: number } | null = null
+      let tapBlocked = false
+      win.addEventListener('touchstart', e => {
+        const t = e.touches[0]
+        start = e.touches.length === 1 && t ? { x: t.screenX, y: t.screenY } : null
+      }, { capture: true, passive: true })
+      // foliate drags the page under the finger but snaps back unless the swipe was half a page or fast;
+      // past 50 px we take over the snap so a short deliberate swipe always turns the page.
+      win.addEventListener('touchend', e => {
+        const t = e.changedTouches[0]
+        const from = start
+        start = null
+        if (!mobileRef.current || !from || !t || e.touches.length > 0 || !view || !paginated()) return
+        if ((window.visualViewport?.scale ?? 1) > 1.01 || !collapsed()) return
+        const dx = from.x - t.screenX
+        const dy = from.y - t.screenY
+        if (Math.abs(dx) < TOUCH_SWIPE_PX || Math.abs(dx) < Math.abs(dy)) return
+        tapBlocked = true
+        setPopup(null)
+        const r = view.renderer
+        if (!view.isFixedLayout && typeof r.snap === 'function') {
+          e.stopImmediatePropagation()
+          requestAnimationFrame(() => r.snap!(Math.sign(dx) * 0.6, 0))
+        } else void (dx > 0 ? view.goRight() : view.goLeft())
+      }, { capture: true })
+      doc.addEventListener('pointerdown', () => {
+        if (!mobileRef.current) return
+        const o = overlays.current
+        tapBlocked = o.popup || o.composer || !collapsed()
+      }, { capture: true })
+      doc.addEventListener('click', e => {
+        if (!mobileRef.current) return
+        const blocked = tapBlocked
+        tapBlocked = false
+        const target = e.target as Element | null
+        if (blocked || !collapsed() || target?.closest?.('a[href]')) return
+        const frame = win.frameElement?.getBoundingClientRect()
+        const x = e.clientX + (frame?.left ?? 0)
+        // Let foliate's own click handler report a tapped highlight first.
+        setTimeout(() => {
+          if (disposed || !view || Date.now() - annotationAt < 400 || popupRef.current) return
+          const box = host.getBoundingClientRect()
+          const third = box.width / 3
+          const zone = x < box.left + third ? 'left' : x > box.right - third ? 'right' : 'middle'
+          if (zone === 'middle' || !paginated()) return toggleChrome()
+          void (zone === 'left' ? view.goLeft() : view.goRight())
+        }, 0)
+      })
+      // iOS adjusts a selection with handles that send no pointer events, so follow the selection itself.
+      let selTimer: ReturnType<typeof setTimeout> | undefined
+      doc.addEventListener('selectionchange', () => {
+        if (!mobileRef.current) return
+        clearTimeout(selTimer)
+        selTimer = setTimeout(() => {
+          if (disposed) return
+          if (!collapsed()) return checkSelection(doc, index)
+          const typing = document.activeElement?.closest?.('.hl-popup')
+          if (popupRef.current?.mode === 'new' && !typing) setPopup(null)
+        }, 250)
+      })
     }
 
     // 6. Track position, save it debounced.
@@ -592,7 +688,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       // 2. Settings before the first section renders.
       setToc(view.book.toc ?? [])
       setFixedLayout(view.isFixedLayout)
-      if (settingsRef.current) applySettings(view, settingsRef.current)
+      if (settingsRef.current) applySettings(view, settingsRef.current, mobileRef.current)
       setReady(true)
 
       // 3. Highlights must be known before init draws the first section.
@@ -639,6 +735,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
     // 13. Navigation requests from the highlights panel, review, etc.
     cleanups.push(onReader('goto', ({ target }) => {
       setPopup(null)
+      setSheetOpen(false)
       void viewRef.current?.goTo(target)
     }))
 
@@ -666,7 +763,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       docs.current.clear()
       emitReader('closed', { bookId })
     }
-  }, [bookId, dispatch, showChrome])
+  }, [bookId, dispatch, showChrome, toggleChrome])
 
   // The view is keyed by book, so a new deep-link target into the open book arrives as a prop change.
   const appliedTarget = useRef(target)
@@ -680,18 +777,19 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
   // 2. Re-apply settings whenever they change.
   useEffect(() => {
     const view = viewRef.current
-    if (ready && view && state.settings) applySettings(view, state.settings)
-  }, [ready, state.settings])
+    if (ready && view && state.settings) applySettings(view, state.settings, mobile)
+  }, [ready, state.settings, mobile])
 
   const theme = state.settings?.readerTheme ?? 'white'
-  const chromeVisible = chrome || popup !== null || composer !== null || tocOpen || menuOpen
+  // On phones the selection popup floats over the page without bringing the toolbar back.
+  const chromeVisible = chrome || (!mobile && popup !== null) || composer !== null || tocOpen || menuOpen || sheetOpen
   // Fixed-layout pages are images of paper, so dark themes invert them instead of restyling text.
   const invert = fixedLayout && (theme === 'gray' || theme === 'night')
   return (
     <div
-      className={`reader theme-${theme} ${chromeVisible ? '' : 'chrome-hidden'}`}
+      className={`reader theme-${theme} ${chromeVisible ? '' : 'chrome-hidden'}${mobile ? ' reader-mobile' : ''}`}
       data-testid="view-reader"
-      onMouseMove={showChrome}
+      onMouseMove={mobile ? undefined : showChrome}
     >
       <ReaderToolbar
         title={book?.title ?? ''}
@@ -700,6 +798,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
         onBack={() => dispatch({ type: 'navigate', view: { name: 'library' } })}
         onToc={() => setTocOpen(o => !o)}
         onNote={() => emitReader('new-note', {})}
+        onHighlights={mobile ? () => setSheetOpen(true) : undefined}
         onMenuChange={setMenuOpen}
       />
       <div className={`reader-host${loading ? ' loading' : ''}${invert ? ' invert-pages' : ''}`} ref={hostRef} />
@@ -738,6 +837,11 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
               .catch((err: Error) => toast(dispatch, 'error', `Could not save note: ${err.message}`))
           }}
         />
+      )}
+      {mobile && (
+        <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Highlights & Notes" testId="highlights-sheet">
+          <HighlightsPanel bookId={bookId} />
+        </BottomSheet>
       )}
       {popup && (
         <HighlightPopup

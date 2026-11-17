@@ -1,5 +1,6 @@
 import type { ReviewCard } from '../../../shared/types'
 import { Emphasized } from '../vocab/Emphasized'
+import { useIsMobile } from '../components/useIsMobile'
 
 const TAGS = { ai: 'Question', highlight: 'Highlight', note: 'Your note', word: 'Word', cloze: 'Highlight' } as const
 
@@ -22,8 +23,13 @@ function Source({ card }: { card: ReviewCard }) {
 export function ReviewCardView({ card, position, total, revealed, onReveal, onNext, onSooner, onOpen }: Props) {
   const ai = card.promptType === 'ai'
   const word = card.promptType === 'word'
+  const mobile = useIsMobile()
+  // Phones: tapping the card reveals it, unless the tap ended a text selection.
+  const tapReveal = (): void => {
+    if (mobile && !revealed && (window.getSelection()?.isCollapsed ?? true)) onReveal()
+  }
   return (
-    <div className="card review-card" data-testid="review-card" key={card.highlightId}>
+    <div className={`card review-card${mobile ? ' review-card-mobile' : ''}`} data-testid="review-card" key={card.highlightId} onClick={mobile ? tapReveal : undefined}>
       <div className="review-meta muted">
         <span>{card.bookTitle}{card.chapter ? ` · ${card.chapter}` : ''}</span>
         <span className="review-tag">{TAGS[card.promptType]}</span>
@@ -46,8 +52,18 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
 
       {!revealed ? (
         <div className="review-footer">
-          <div className="muted">{word ? <>What does it mean? Say it to yourself, then press <b>Space</b></> : <>Think of the answer, then press <b>Space</b></>}</div>
-          <button className="btn btn-primary" data-testid="review-reveal" onClick={onReveal}>Show Answer</button>
+          <div className="muted">
+            {mobile
+              ? (word ? 'What does it mean? Say it to yourself, then tap the card' : 'Think of the answer, then tap the card')
+              : word ? <>What does it mean? Say it to yourself, then press <b>Space</b></> : <>Think of the answer, then press <b>Space</b></>}
+          </div>
+          {mobile ? (
+            <div className="review-actions">
+              <button className="btn btn-primary review-rate" data-testid="review-reveal" onClick={e => { e.stopPropagation(); onReveal() }}>Show Answer</button>
+            </div>
+          ) : (
+            <button className="btn btn-primary" data-testid="review-reveal" onClick={onReveal}>Show Answer</button>
+          )}
         </div>
       ) : (
         <div data-testid="review-answer">
@@ -78,12 +94,12 @@ export function ReviewCardView({ card, position, total, revealed, onReveal, onNe
               {card.note && card.note !== card.answer && <div className="review-note">{card.note}</div>}
             </>
           )}
-          <div className="review-rates">
-            <button className="btn review-rate" data-testid="review-sooner" onClick={onSooner}>{word ? 'Forgot' : 'Sooner'} <kbd>S</kbd></button>
-            <button className="btn btn-primary review-rate" data-testid="review-next" onClick={onNext}>{word ? 'Got it' : 'Next'} <kbd>Space</kbd></button>
+          <div className={`review-rates${mobile ? ' review-actions' : ''}`}>
+            <button className="btn review-rate" data-testid="review-sooner" onClick={onSooner}>{word ? 'Forgot' : 'Sooner'}{!mobile && <> <kbd>S</kbd></>}</button>
+            <button className="btn btn-primary review-rate" data-testid="review-next" onClick={onNext}>{word ? 'Got it' : 'Next'}{!mobile && <> <kbd>Space</kbd></>}</button>
           </div>
           <div className="review-footer">
-            <button className="btn btn-ghost" data-testid="review-open" onClick={onOpen}>Open in book <kbd>⌘O</kbd></button>
+            <button className="btn btn-ghost" data-testid="review-open" onClick={onOpen}>Open in book{!mobile && <> <kbd>⌘O</kbd></>}</button>
           </div>
         </div>
       )}

@@ -4,6 +4,8 @@ import { chooseAndOpenLibrary, openLibrary, refreshBooks, refreshDueCount, toast
 import { latestOpenedBook } from './library/metadata'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
+import { TabBar } from './components/TabBar'
+import { useIsMobile } from './components/useIsMobile'
 import { Toasts } from './components/Toasts'
 import { Welcome } from './components/Welcome'
 import { LibraryView } from './views/LibraryView'
@@ -15,6 +17,7 @@ import { TerminalPanel } from './terminal/TerminalPanel'
 import { PomodoroProvider, usePomodoro } from './pomodoro/PomodoroProvider'
 import { emitReader } from './reader/bus'
 import { useReadingTracker } from './sessions/useReadingTracker'
+import './styles/mobile.css'
 
 export function App() {
   return (
@@ -26,6 +29,7 @@ export function App() {
 
 function Shell() {
   const { state, dispatch } = useAppState()
+  const mobile = useIsMobile()
   const pomodoroState = usePomodoro()
   const pomodoro = useRef(pomodoroState)
   pomodoro.current = pomodoroState
@@ -90,18 +94,33 @@ function Shell() {
   if (!state.root) return (<><Welcome /><Toasts /></>)
 
   const v = state.view
+  const views = (
+    <>
+      {v.name === 'library' && <LibraryView />}
+      {v.name === 'reader' && <ReaderView key={v.bookId} bookId={v.bookId} target={v.target} />}
+      {v.name === 'review' && <ReviewView />}
+      {v.name === 'stats' && <StatsView />}
+      {v.name === 'vocab' && <VocabView />}
+    </>
+  )
+  // Phones get a full-screen view with a bottom tab bar; the reader takes the whole screen.
+  if (mobile) {
+    return (
+      <div className={`app mobile ${v.name === 'reader' ? 'in-reader' : ''}`} data-testid="app-shell">
+        <main className="main">
+          <div className="content">{views}</div>
+        </main>
+        {v.name !== 'reader' && <TabBar />}
+        <Toasts />
+      </div>
+    )
+  }
   const position = state.settings?.terminalPosition ?? 'bottom'
   return (
     <div className="app" data-testid="app-shell">
       <Sidebar />
       <main className={`main term-${position}`}>
-        <div className="content">
-          {v.name === 'library' && <LibraryView />}
-          {v.name === 'reader' && <ReaderView key={v.bookId} bookId={v.bookId} target={v.target} />}
-          {v.name === 'review' && <ReviewView />}
-          {v.name === 'stats' && <StatsView />}
-          {v.name === 'vocab' && <VocabView />}
-        </div>
+        <div className="content">{views}</div>
         {window.api.platform !== 'web' && state.terminalMounted && <TerminalPanel visible={state.terminalOpen} />}
       </main>
       <StatusBar />
