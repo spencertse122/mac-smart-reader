@@ -26,10 +26,13 @@ export class Dirent {
   isDirectory(): boolean { return this.e.kind === 'dir' }
 }
 
-export async function readFile(path: string, opts?: Enc): Promise<Buffer & string> {
+export function readFile(path: string): Promise<Buffer>
+export function readFile(path: string, opts: BufferEncoding | { encoding: BufferEncoding }): Promise<string>
+export async function readFile(path: string, opts?: Enc): Promise<Buffer | string> {
   const data = await getVfs().read(path)
-  const buf = Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-  return (wantsString(opts) ? buf.toString('utf8') : buf) as Buffer & string
+  // Copy: callers may mutate the result, and the VFS bytes must stay intact.
+  const buf = Buffer.from(data)
+  return wantsString(opts) ? buf.toString('utf8') : buf
 }
 
 export async function writeFile(path: string, data: string | Uint8Array, _opts?: Enc): Promise<void> {
@@ -80,6 +83,7 @@ export class FileHandle {
   async read(buf: Uint8Array, offset = 0, length = buf.length - offset, position: number | null = 0): Promise<{ bytesRead: number; buffer: Uint8Array }> {
     const vfs = getVfs()
     const size = vfs.stat(this.path).size
+    // position null means 'current position' in Node; handles here are stateless, so that reads from 0.
     const start = Math.min(position ?? 0, size)
     const end = Math.min(start + length, size)
     // Ranged so a remote book is not downloaded whole just to sniff its header.

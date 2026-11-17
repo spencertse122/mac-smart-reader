@@ -49,6 +49,40 @@ describe('vfs', () => {
     await expect(fs.stat('/t.json.tmp')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('rename moves a directory with nested files and emits replayable ops', async () => {
+    await fs.mkdir('/books/old/sub', { recursive: true })
+    await fs.writeFile('/books/old/a.txt', 'A')
+    await fs.writeFile('/books/old/sub/b.txt', 'B')
+    const ops: string[] = []
+    vfs.onLocalChange(op => ops.push(`${op.type}:${op.path}`))
+    await fs.rename('/books/old', '/books/new')
+    expect(await fs.readFile('/books/new/sub/b.txt', 'utf8')).toBe('B')
+    expect(await fs.readFile('/books/new/a.txt', 'utf8')).toBe('A')
+    await expect(fs.stat('/books/old')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(ops).toContain('remove:/books/old/a.txt')
+    expect(ops).toContain('remove:/books/old')
+    expect(ops).toContain('write:/books/new/sub/b.txt')
+    await expect(fs.rename('/books/missing', '/books/x')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('rename onto a non-empty directory fails, onto an empty one replaces it', async () => {
+    await fs.mkdir('/s', { recursive: true })
+    await fs.writeFile('/s/f', 'x')
+    await fs.mkdir('/full', { recursive: true })
+    await fs.writeFile('/full/g', 'y')
+    await fs.mkdir('/empty', { recursive: true })
+    await expect(fs.rename('/s', '/full')).rejects.toMatchObject({ code: 'ENOTEMPTY' })
+    await fs.rename('/s', '/empty')
+    expect(await fs.readFile('/empty/f', 'utf8')).toBe('x')
+  })
+
+  it('readFile returns a copy', async () => {
+    await fs.writeFile('/c', 'abc')
+    const b = await fs.readFile('/c')
+    b[0] = 0x7a
+    expect(await fs.readFile('/c', 'utf8')).toBe('abc')
+  })
+
   it('appendFile appends', async () => {
     await fs.appendFile('/l.txt', 'a\n')
     await fs.appendFile('/l.txt', 'b\n')

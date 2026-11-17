@@ -10,6 +10,8 @@ export type VfsEntry = {
   md5?: string
   data?: Uint8Array
 }
+// A rename has no op of its own: it replays as `remove` for every old path (files, then dirs
+// deepest-first) followed by `mkdir`/`write` for every new path (parents first).
 export type VfsOp = { type: 'write' | 'mkdir' | 'remove'; path: string }
 export type RemoteLoader = (e: VfsEntry, range?: [number, number]) => Promise<Uint8Array>
 
@@ -152,12 +154,41 @@ export class Vfs {
   }
 
   async rename(from: string, to: string): Promise<void> {
-    const src = this.file(from, 'rename')
+    const src = this.stat(from, 'rename')
     const dst = norm(to)
-    if (this.entries.get(dst)?.kind === 'dir') throw fsError('EISDIR', 'rename', dst)
-    const data = await this.read(src.path)
-    this.writeLocal(dst, data)
-    this.remove(src.path)
+    if (src.path === dst) return
+    const target = this.entries.get(dst)
+    if (src.kind === 'file') {
+      if (target?.kind === 'dir') throw fsError('EISDIR', 'rename', dst)
+      const data = await this.read(src.path)
+      this.writeLocal(dst, data)
+      this.remove(src.path)
+      return
+    }
+    if (dst.startsWith(`${src.path}/`)) throw fsError('EINVAL', 'rename', dst)
+    if (target?.kind === 'file') throw fsError('ENOTDIR', 'rename', dst)
+    if (target && this.readdir(dst).length > 0) throw fsError('ENOTEMPTY', 'rename', dst)
+    const prefix = `${src.path}/`
+    const moved = [...this.entries.values()].filter(e => e.path.startsWith(prefix)).sort((a, b) => (a.path < b.path ? -1 : 1))
+    // Load first: remote-only bytes must be fetched before their entries are dropped.
+    const bytes = new Map<string, Uint8Array>()
+    for (const e of moved) if (e.kind === 'file') bytes.set(e.path, await this.read(e.path))
+    for (const e of [...moved].reverse()) {
+      this.entries.delete(e.path)
+      this.emit({ type: 'remove', path: e.path }, false)
+    }
+    this.entries.delete(src.path)
+    this.emit({ type: 'remove', path: src.path }, false)
+    if (target) {
+      this.entries.delete(dst)
+      this.emit({ type: 'remove', path: dst }, false)
+    }
+    this.mkdirs(dst, false)
+    for (const e of moved) {
+      const np = dst + e.path.slice(src.path.length)
+      if (e.kind === 'dir') this.mkdirs(np, false)
+      else this.writeLocal(np, bytes.get(e.path)!)
+    }
   }
 }
 

@@ -10,14 +10,13 @@ const watchers = new Map<string, Array<{ cb: Listener; off: () => void }>>()
 
 // Event-driven rather than polled: fires on every change, local or from Drive.
 export function watchFile(path: string, _opts: { interval?: number }, cb: Listener): void {
-  const vfs = getVfs()
   const p = norm(path)
   const snap = (): Snap => {
-    const e = vfs.entry(p)
+    const e = getVfs().entry(p)
     return { size: e?.size ?? 0, mtimeMs: e?.mtimeMs ?? 0, ino: e ? 1 : 0 }
   }
   let prev = snap()
-  const off = vfs.onChange(op => {
+  const off = getVfs().onChange(op => {
     if (op.path !== p) return
     const cur = snap()
     const before = prev

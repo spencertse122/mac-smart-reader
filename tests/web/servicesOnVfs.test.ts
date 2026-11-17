@@ -75,6 +75,19 @@ describe('existing services on the VFS', () => {
     expect((await stats.get()).K).toBeGreaterThanOrEqual(0)
   })
 
+  it('saveMetadata retitle renames the data dir of a book without highlights.json', async () => {
+    seedBooks('/lib')
+    const library = new LibraryService('/lib', undefined, undefined, { trustMtime: false })
+    const book = (await library.scan()).find(b => b.path.endsWith('.epub'))!
+    const oldDir = await library.bookDir(book.id)
+    const oldSlug = book.slug
+    vfs.writeLocal(`${oldDir}/cover.jpg`, new Uint8Array([1, 2, 3]))
+    const saved = await library.saveMetadata(book.id, { title: 'Brand New Title', author: 'Me', cover: null })
+    expect(saved.slug).not.toBe(oldSlug)
+    expect(vfs.entry(oldDir)).toBeUndefined()
+    expect(vfs.entry(`${await library.bookDir(book.id)}/cover.jpg`)?.size).toBe(3)
+  })
+
   it('library.scan lists the fixture books with the real content ids', async () => {
     const root = '/lib'
     const names = seedBooks(root)
