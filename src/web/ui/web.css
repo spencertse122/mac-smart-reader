@@ -21,9 +21,3 @@
 .web-row-end { margin-left: auto; color: var(--text-3); }
 
 .web-banner { position: fixed; left: 0; right: 0; top: 0; z-index: 1100; min-height: 44px; padding: env(safe-area-inset-top) 16px 0; border: 0; background: var(--danger); color: #fff; font: inherit; font-weight: 600; }
-
-.web-menu-btn { position: fixed; z-index: 900; top: calc(env(safe-area-inset-top) + 4px); right: calc(env(safe-area-inset-right) + 4px); width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 22px; background: transparent; color: var(--text-2); }
-.web-scrim { position: fixed; inset: 0; z-index: 950; }
-.web-menu { position: fixed; z-index: 960; top: calc(env(safe-area-inset-top) + 52px); right: 8px; min-width: 180px; display: flex; flex-direction: column; background: var(--bg-elevated); border: 1px solid var(--separator); border-radius: var(--radius); box-shadow: var(--shadow-l); overflow: hidden; }
-.web-menu button { min-height: 44px; padding: 0 16px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; }
-.web-menu button:active { background: var(--hover); }

@@ -10,7 +10,6 @@ import { onFolderRequest, requestFolder, type PickedFolder } from './ui/folderBu
 import { SignIn } from './ui/SignIn'
 import { FolderPicker } from './ui/FolderPicker'
 import { ReconnectBanner } from './ui/ReconnectBanner'
-import { WebMenu } from './ui/WebMenu'
 import { App } from '../renderer/src/App'
 import { AppStateProvider } from '../renderer/src/state/appState'
 import '../renderer/src/styles/tokens.css'
@@ -38,13 +37,13 @@ const rawDrive = createDriveClient({
     return t
   }
 })
-const progress = new Set<(loaded: number, total: number) => void>()
+const progress = new Set<(driveId: string, loaded: number, total: number) => void>()
 const drive: typeof rawDrive = {
   ...rawDrive,
   download: (id, range, onProgress) =>
     rawDrive.download(id, range, (l, t) => {
       onProgress?.(l, t)
-      for (const cb of [...progress]) cb(l, t)
+      for (const cb of [...progress]) cb(id, l, t)
     })
 }
 
@@ -63,6 +62,16 @@ const api = createWebApi({
   cache,
   downloadProgress: cb => (progress.add(cb), () => void progress.delete(cb))
 })
+api.account = {
+  email: () => auth.email(),
+  switchFolder: async () => void (await api.library.chooseFolder()),
+  async signOut() {
+    const n = api.sync()?.pending() ?? 0
+    if (n > 0 && !confirm(`${n} change${n === 1 ? '' : 's'} haven't synced to Google Drive yet. They stay on this device and sync after you sign in again. Sign out anyway?`)) return
+    await signOut()
+    location.reload()
+  }
+}
 window.api = api
 
 async function signOut(): Promise<void> {
@@ -87,7 +96,6 @@ function WebRoot() {
     <AppStateProvider>
       <App />
       <ReconnectBanner api={api} auth={auth} />
-      <WebMenu api={api} onSignOut={() => void signOut().then(() => location.reload())} />
       {pick && (
         <FolderPicker
           drive={drive}

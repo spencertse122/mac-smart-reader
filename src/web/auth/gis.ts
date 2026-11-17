@@ -28,6 +28,8 @@ declare global {
 export type Auth = {
   token(): string | null
   email(): string | null
+  status(): 'loading' | 'ready' | 'error'
+  whenReady(): Promise<void>
   signIn(): Promise<void>
   reconnect(): Promise<void>
   signOut(): void
@@ -84,19 +86,13 @@ export function createAuth(clientId: string, opts: AuthOpts = {}): Auth {
     }, null)
   const email = (): string | null => safe(() => local.getItem(EMAIL_KEY), null)
 
-  async function request(prompt: boolean): Promise<void> {
-    const google = await load()
-    const hint = email()
-    const res = await new Promise<TokenResponse>((resolve, reject) => {
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: SCOPE,
-        callback: resolve,
-        error_callback: e => reject(new Error(e.message || e.type))
-      })
-      // Without a prior grant, omit prompt so GIS shows its own account/consent chooser.
-      client.requestAccessToken(prompt && hint ? { prompt: '', login_hint: hint } : {})
-    })
+  // The script and token client load at startup: requestAccessToken opens a popup, which mobile Safari
+  // only allows synchronously inside the tap, so nothing may be awaited between the tap and that call.
+  let client: TokenClient | null = null
+  let status: 'loading' | 'ready' | 'error' = 'loading'
+  let pending: { resolve: () => void; reject: (e: Error) => void } | null = null
+
+  async function accept(res: TokenResponse): Promise<void> {
     if (!res.access_token) throw new Error(res.error ?? 'Google sign-in failed')
     const expiresAt = now() + (res.expires_in ?? 3600) * 1000
     safe(() => session.setItem(AUTH_KEY, JSON.stringify({ token: res.access_token, expiresAt })), undefined)
@@ -111,10 +107,45 @@ export function createAuth(clientId: string, opts: AuthOpts = {}): Auth {
     }
     changed()
   }
+  const settle = (p: Promise<void>): void => {
+    const cur = pending
+    pending = null
+    p.then(() => cur?.resolve(), e => cur?.reject(e as Error))
+  }
+
+  const ready = load().then(
+    google => {
+      client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPE,
+        callback: r => settle(accept(r)),
+        error_callback: e => settle(Promise.reject(new Error(e.message || e.type)))
+      })
+      status = 'ready'
+      changed()
+    },
+    () => {
+      status = 'error'
+      changed()
+    }
+  )
+
+  function request(prompt: boolean): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (!client) return reject(new Error(status === 'error' ? 'Could not load Google sign-in' : 'Google sign-in is still loading'))
+      pending?.reject(new Error('Superseded'))
+      pending = { resolve, reject }
+      const hint = email()
+      // Without a prior grant, omit prompt so GIS shows its own account/consent chooser.
+      client.requestAccessToken(prompt && hint ? { prompt: '', login_hint: hint } : {})
+    })
+  }
 
   return {
     token,
     email,
+    status: () => status,
+    whenReady: () => ready,
     signIn: () => request(false),
     reconnect: () => request(true),
     signOut() {

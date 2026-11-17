@@ -24,7 +24,7 @@ export interface WebApiDeps {
   autoPull?: boolean
   now?: () => Date
   // Subscribes to raw Drive download progress (the app wraps the client's download to feed it).
-  downloadProgress?: (cb: (loaded: number, total: number) => void) => () => void
+  downloadProgress?: (cb: (driveId: string, loaded: number, total: number) => void) => () => void
 }
 
 export type WebApi = SmartReaderApi & {
@@ -50,7 +50,7 @@ export function createWebApi(deps: WebApiDeps): WebApi {
     auth: new Set<() => void>(),
     read: new Set<(loaded: number, total: number) => void>()
   }
-  let reading = 0
+  let readingId: string | null = null
   const emit = (set: Set<() => void>): void => {
     for (const cb of [...set]) cb()
   }
@@ -168,15 +168,16 @@ export function createWebApi(deps: WebApiDeps): WebApi {
           const hit = await deps.cache.get(key)
           if (hit) return { name: basename(b.path), data: hit }
         }
-        const off = deps.downloadProgress?.((l, t) => {
-          if (reading > 0) for (const cb of [...subs.read]) cb(l, t)
+        // Only the book's own download counts, not background sync traffic.
+        const off = deps.downloadProgress?.((did, l, t) => {
+          if (did === readingId) for (const cb of [...subs.read]) cb(l, t)
         })
-        reading++
+        readingId = e?.driveId ?? null
         let r: { name: string; data: Uint8Array | Buffer }
         try {
           r = await w.library.readBook(id)
         } finally {
-          reading--
+          readingId = null
           off?.()
         }
         const data = new Uint8Array(r.data)

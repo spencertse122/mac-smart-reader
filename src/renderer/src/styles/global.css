@@ -31,6 +31,10 @@ html:not(.platform-mac) .sidebar { background: var(--bg-2); }
 .sidebar-item .badge { margin-left: auto; }
 .sidebar-section { flex: 1; overflow: auto; margin-top: 12px; border-top: 1px solid var(--separator); }
 .sidebar-footer { padding: 10px 14px; border-top: 1px solid var(--separator); font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.sidebar-footer { position: relative; }
+.account-menu { position: absolute; right: 8px; bottom: 100%; min-width: 160px; display: flex; flex-direction: column; background: var(--bg-elevated); border: 1px solid var(--separator); border-radius: var(--radius); box-shadow: var(--shadow-l); overflow: hidden; z-index: 20; }
+.account-menu button { min-height: 36px; padding: 0 14px; border: 0; background: transparent; color: var(--text); text-align: left; font: inherit; }
+.account-menu button:hover { background: var(--hover); }
 .sidebar-footer .folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 
 .main { background: var(--bg); display: flex; min-width: 0; min-height: 0; position: relative; }

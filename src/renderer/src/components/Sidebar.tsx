@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BarChart3, BookA, BookMarked, BookOpen, FolderOpen, Highlighter, Layers } from 'lucide-react'
 import { useAppState, type SidebarTab } from '../state/appState'
 import { chooseAndOpenLibrary, refreshBooks } from '../state/actions'
@@ -7,6 +7,8 @@ import { HighlightsPanel } from './HighlightsPanel'
 
 export function Sidebar() {
   const { state, dispatch } = useAppState()
+  const account = window.api.account
+  const [menu, setMenu] = useState(false)
   const readerBookId = state.view.name === 'reader' ? state.view.bookId : null
   const go = (tab: SidebarTab): void => {
     if (tab === 'library') dispatch({ type: 'navigate', view: { name: 'library' } })
@@ -51,9 +53,20 @@ export function Sidebar() {
       <div className="sidebar-footer" title={state.root ?? ''}>
         <FolderOpen size={14} />
         <span className="folder-name">{folder}</span>
-        <button className="btn-ghost icon-btn" title="Open another folder (⇧⌘O)" onClick={() => void chooseAndOpenLibrary(dispatch)}>
+        <button
+          className="btn-ghost icon-btn"
+          title={account ? 'Account' : 'Open another folder (⇧⌘O)'}
+          data-testid={account ? 'account-menu' : undefined}
+          onClick={() => (account ? setMenu(m => !m) : void chooseAndOpenLibrary(dispatch))}
+        >
           …
         </button>
+        {account && menu && (
+          <div className="account-menu" role="menu">
+            <button role="menuitem" onClick={() => { setMenu(false); void chooseAndOpenLibrary(dispatch) }}>Switch folder</button>
+            <button role="menuitem" data-testid="sign-out" onClick={() => { setMenu(false); void account.signOut() }}>Sign out</button>
+          </div>
+        )}
       </div>
     </aside>
   )

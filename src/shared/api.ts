@@ -15,6 +15,8 @@ export type MenuAction =
 
 export interface SmartReaderApi {
   platform: 'mac' | 'web'
+  // Web only: the signed-in Google account. Mac omits it.
+  account?: { email(): string | null; switchFolder(): Promise<void>; signOut(): Promise<void> }
   settings: {
     get(): Promise<Settings>
     update(patch: Partial<Settings>): Promise<Settings>

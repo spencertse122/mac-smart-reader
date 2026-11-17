@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { idbOutbox } from '../../src/web/sync/outbox'
 import { createAuth, type GoogleGlobal } from '../../src/web/auth/gis'
 
 const mem = (): Storage => {
@@ -49,6 +50,7 @@ function setup() {
 describe('auth', () => {
   it('token expires 60s early', async () => {
     const { auth, advance } = setup()
+    await auth.whenReady()
     await auth.signIn()
     expect(auth.token()).toBe('tok')
     expect(auth.email()).toBe('a@b.c')
@@ -59,20 +61,37 @@ describe('auth', () => {
   })
 
   it('signOut clears token but not outbox', async () => {
-    const { auth, session, local } = setup()
-    local.setItem('sr.outbox.x', 'keep')
+    const { auth, session } = setup()
+    const outbox = idbOutbox('sr.outbox.test')
+    await outbox.put({ path: '/library/a.json', data: new Uint8Array([1]), baseMd5: null })
+    await auth.whenReady()
     await auth.signIn()
     auth.signOut()
     expect(auth.token()).toBeNull()
     expect(session.getItem('sr.auth')).toBeNull()
-    expect(local.getItem('sr.outbox.x')).toBe('keep')
+    expect((await outbox.all()).map(i => i.path)).toEqual(['/library/a.json'])
   })
 
   it('reconnect uses an empty prompt with the login hint, first sign-in omits it', async () => {
     const { auth, calls } = setup()
+    await auth.whenReady()
     await auth.signIn()
     expect(calls[0]).not.toHaveProperty('prompt')
     await auth.reconnect()
     expect(calls[1]).toEqual({ prompt: '', login_hint: 'a@b.c' })
+  })
+
+  it('requests the token synchronously inside the tap', async () => {
+    const { auth, calls } = setup()
+    await auth.whenReady()
+    const p = auth.signIn()
+    expect(calls).toHaveLength(1)
+    await p
+  })
+
+  it('refuses to sign in before the script is ready', async () => {
+    const { auth, calls } = setup()
+    await expect(auth.signIn()).rejects.toThrow(/loading/)
+    expect(calls).toHaveLength(0)
   })
 })
