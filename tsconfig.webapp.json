@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2023", "module": "ESNext", "moduleResolution": "Bundler",
+    "strict": true, "skipLibCheck": true, "esModuleInterop": true, "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["node", "vite/client"], "noEmit": true
+  },
+  "include": ["src/web/**/*", "src/shared/**/*", "src/renderer/src/**/*", "tests/web/**/*", "web.aliases.ts", "vite.web.config.ts", "vitest.web.config.ts"]
+}
