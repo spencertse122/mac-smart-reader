@@ -77,7 +77,11 @@ export async function copyFile(from: string, to: string): Promise<void> {
   const src = vfs.stat(from, 'copyfile')
   // writeFileAtomic's .bak of a file never downloaded: Drive still holds that version, and fetching it
   // would make the write fail offline or with an expired token.
-  if (to.endsWith('.bak') && src.kind === 'file' && !src.data) return
+  if (to.endsWith('.bak') && src.kind === 'file' && !src.data) {
+    // An older .bak would otherwise outlive the write and pose as a backup of this version.
+    if (vfs.entry(to)) vfs.remove(to)
+    return
+  }
   vfs.writeLocal(to, await vfs.read(from))
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "smart-reader",
   "productName": "Smart Reader",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Local ebook reader for durable learning",
   "author": "spencertse122",
@@ -21,7 +21,8 @@
     "dev:web": "vite -c vite.web.config.ts",
     "build:web": "vite build -c vite.web.config.ts",
     "test:web": "vitest run -c vitest.web.config.ts",
-    "e2e:web": "playwright test -c playwright.web.config.ts"
+    "e2e:web": "playwright test -c playwright.web.config.ts",
+    "deploy:web": "bash scripts/deploy-web.sh"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",

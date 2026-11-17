@@ -70,6 +70,26 @@ Open the terminal (Command+J), start the agent, and try:
 - "what do I know about incentives?"
 - "weekly review"
 
+## Read on your phone
+
+Smart Reader also runs in your phone's browser: https://smart-reader-673514603120.us-central1.run.app
+
+1. Tap **Sign in with Google**. Google shows "Google hasn't verified this app": that is your own app in testing mode, so tap **Continue**.
+2. Choose your books folder in Google Drive. If the Mac app already uses it, it is detected for you.
+3. Add it to your home screen (Share, then Add to Home Screen on iPhone; the menu, then Install app on Android) and it opens full screen like an app.
+
+Your library, highlights, saved words and reading positions sync through Google Drive, so keep Google Drive for desktop running on your Mac. Edits made on either side show up on the other.
+
+Not on the web: the AI terminal and dictionary Look Up. Highlighting, notes, reviews and reading all work.
+
+### Deploying the web app
+
+```bash
+npm run deploy:web   # needs gcloud, and VITE_GOOGLE_CLIENT_ID in the environment or .env.production
+```
+
+This builds `out/web` and deploys it to Cloud Run (`smart-reader`, nginx in `web/`).
+
 ## Your data and backups
 
 Everything is plain files in your books folder. Back it up with Time Machine or similar. It is not stored in GitHub.

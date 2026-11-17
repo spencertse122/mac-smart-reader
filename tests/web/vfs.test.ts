@@ -187,4 +187,13 @@ describe('vfs', () => {
     await writeFileAtomic('/lib/h.md', 'newer')
     expect(await fs.readFile('/lib/h.md.bak', 'utf8')).toBe('new')
   })
+
+  it('skipping the .bak of a never-downloaded file removes a stale .bak', async () => {
+    vfs.setRemoteLoader(async () => new Uint8Array())
+    vfs.putRemote({ path: '/lib/s.md', kind: 'file', driveId: 'D2', size: 4, mtimeMs: 5 })
+    await fs.writeFile('/lib/s.md.bak', 'old backup')
+    await writeFileAtomic('/lib/s.md', 'new')
+    expect(vfs.entry('/lib/s.md.bak')).toBeUndefined()
+    expect(await fs.readFile('/lib/s.md', 'utf8')).toBe('new')
+  })
 })
