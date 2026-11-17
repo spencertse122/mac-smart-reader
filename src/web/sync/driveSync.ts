@@ -8,11 +8,27 @@ import { isPushable, shouldIndex } from './pathRules'
 import { dec, enc, isMergeable, md5hex, parsesAsJson, pool } from './util'
 
 // What Drive holds for a path as of the last sync (pull or push).
-type Meta = { id: string; kind: 'file' | 'dir'; md5: string | null }
+type Meta = { id: string; kind: 'file' | 'dir'; md5: string | null; mtime: number }
 // A queued upload. `mkdir` items (empty folders) are not persisted: a child push recreates them anyway.
 type Pending = OutboxItem & { mkdir?: boolean }
 
 const INDEX_CONCURRENCY = 8
+
+const mtimeOf = (f: { modifiedTime?: string }): number => Date.parse(f.modifiedTime ?? '') || 0
+// Drive allows two files of one name in a folder. We always use the newest (ties: the larger id), so
+// every device and every listing order picks the same one.
+const newer = (a: { id: string; mtime: number }, b: { id: string; mtime: number }): boolean =>
+  a.mtime !== b.mtime ? a.mtime > b.mtime : a.id > b.id
+const newestFile = (files: DriveFile[], name: string): DriveFile | undefined => {
+  let best: DriveFile | undefined
+  for (const f of files) {
+    if (f.name !== name || f.mimeType === FOLDER_MIME) continue
+    if (!best || newer({ id: f.id, mtime: mtimeOf(f) }, { id: best.id, mtime: mtimeOf(best) })) best = f
+  }
+  return best
+}
+// Base of an edit derived from a version older than the current one: never equals a Drive md5, so the push merges.
+const UNKNOWN_BASE = '!unknown'
 const MAX_BACKOFF_MS = 30_000
 
 /**
@@ -34,6 +50,10 @@ export class DriveSync {
   private inflight: string | null = null
   private persisting = new Map<string, Promise<void>>()
   private loads = new WeakMap<VfsEntry, Promise<Uint8Array>>()
+  // Paths whose older bytes a download handed out after a pull had already replaced that version.
+  private staleReads = new Set<string>()
+  // The newest same-name file we passed over per path, adopted if the one we use goes away.
+  private twins = new Map<string, DriveFile>()
   private lock: Promise<unknown> = Promise.resolve()
   private token: string | null = null
   private lastPull = -Infinity
@@ -88,6 +108,11 @@ export class DriveSync {
     this.changeCbs.clear()
     this.authCbs.clear()
     this.syncCbs.clear()
+  }
+
+  // Resolves once every queued edit is in the persistent outbox.
+  async persisted(): Promise<void> {
+    while (this.persisting.size) await Promise.all([...this.persisting.values()])
   }
 
   pending(): number {
@@ -183,9 +208,15 @@ export class DriveSync {
     } else {
       const data = this.vfs.entry(p)?.data
       if (!data) return
+      // The writer may hold bytes older than meta's version (a pull landed mid-read): force a merge.
+      const stale = this.staleReads.delete(p) || !!op.blind
       // Keep the base this edit started from if an earlier edit is still queued.
       const prev = this.dirty.get(p)
-      const base = prev && !prev.mkdir && !prev.remove ? prev : { baseMd5: m?.md5 ?? null, baseText: this.baseText.get(p) ?? null }
+      const base = stale
+        ? { baseMd5: UNKNOWN_BASE, baseText: null }
+        : prev && !prev.mkdir && !prev.remove
+          ? prev
+          : { baseMd5: m?.md5 ?? null, baseText: this.baseText.get(p) ?? null }
       this.enqueue({ path: p, data, baseMd5: base.baseMd5, baseText: base.baseText ?? null })
     }
     this.kick()
@@ -300,12 +331,14 @@ export class DriveSync {
       // Not known on Drive. The other device may have created it since our last pull: adopt it.
       const parentId = await this.ensureFolder(posix.dirname(path))
       const name = posix.basename(path)
-      const existing = (await this.drive.listChildren(parentId)).find(f => f.name === name && f.mimeType !== FOLDER_MIME)
+      const existing = newestFile(await this.drive.listChildren(parentId), name)
       if (!existing) return this.pushed(path, data, startMd5, await this.drive.createFile(name, parentId, data))
       remote = existing
     } else {
       // The changes feed may lag: ask Drive for its current version right before overwriting it.
       remote = await this.drive.get(m.id)
+      // Trashed on the other device since our last pull: editing it would land the edit in the trash.
+      if (remote.trashed) throw new DriveError(404, 'trashed on Drive')
     }
     const fresh = remote.md5Checksum ?? null
     if (fresh === hash) {
@@ -425,10 +458,11 @@ export class DriveSync {
     return path.slice(this.mountPath.length + 1)
   }
 
-  private register(path: string, f: Pick<DriveFile, 'id' | 'mimeType'> & { md5Checksum?: string }): void {
+  private register(path: string, f: Pick<DriveFile, 'id' | 'mimeType'> & { md5Checksum?: string; modifiedTime?: string }): void {
     const old = this.meta.get(path)
     if (old && old.id !== f.id && this.byId.get(old.id) === path) this.byId.delete(old.id)
-    this.meta.set(path, { id: f.id, kind: f.mimeType === FOLDER_MIME ? 'dir' : 'file', md5: f.md5Checksum ?? null })
+    const mtime = f.modifiedTime ? mtimeOf(f) : old?.id === f.id ? old.mtime : 0
+    this.meta.set(path, { id: f.id, kind: f.mimeType === FOLDER_MIME ? 'dir' : 'file', md5: f.md5Checksum ?? null, mtime })
     this.byId.set(f.id, path)
   }
 
@@ -479,14 +513,22 @@ export class DriveSync {
     while (level.length) {
       const next: Array<[string, string]> = []
       await pool(level, INDEX_CONCURRENCY, async ([fid, fpath]) => {
-        for (const f of await this.drive.listChildren(fid)) {
+        const files = await this.drive.listChildren(fid)
+        for (const f of files) {
           const p = this.childPath(fpath, f)
           if (!p || this.dirty.has(p)) continue
           const isDir = f.mimeType === FOLDER_MIME
           if (!isDir && f.size === undefined) continue
+          if (!isDir && newestFile(files, f.name) !== f) {
+            this.shadow(p, f)
+            continue
+          }
           const cur = this.meta.get(p)
-          // Twin names on Drive: the first one listed wins. Same id and md5: already up to date.
-          if (cur && (cur.id !== f.id || cur.md5 === (f.md5Checksum ?? null))) {
+          // Twin files: the newest wins (above, and against what we already use); twin folders: the first
+          // one listed. Same id and md5: already up to date.
+          const twin = cur && cur.id !== f.id && (isDir || !newer({ id: f.id, mtime: mtimeOf(f) }, cur))
+          if (twin && !isDir) this.shadow(p, f)
+          if (cur && (twin || (cur.id === f.id && cur.md5 === (f.md5Checksum ?? null)))) {
             if (isDir && cur.id === f.id) next.push([f.id, p])
             continue
           }
@@ -505,7 +547,12 @@ export class DriveSync {
     // Only the id currently mapped at that path counts: Drive may replace a file with a new id.
     const known = knownPath && this.meta.get(knownPath)?.id === c.fileId ? knownPath : undefined
     if (c.removed || !f || f.trashed) {
-      if (known) this.removeRemote(known, changed)
+      for (const [p, t] of this.twins) if (t.id === c.fileId) this.twins.delete(p)
+      if (!known) return
+      const twin = this.twins.get(known)
+      this.twins.delete(known)
+      this.removeRemote(known, changed)
+      if (twin) await this.applyChange({ fileId: twin.id, removed: false, file: twin }, changed)
       return
     }
     const parentId = f.parents?.[0]
@@ -526,6 +573,8 @@ export class DriveSync {
       await this.indexFolder(f.id, path, changed)
       return
     }
+    // An older twin of the file we use: never let it replace ours.
+    if (m && m.kind === 'file' && m.id !== f.id && !newer({ id: f.id, mtime: mtimeOf(f) }, m)) return this.shadow(path, f)
     const md5 = f.md5Checksum ?? null
     if (m && m.md5 === md5) {
       if (m.id !== f.id) this.register(path, f)
@@ -544,6 +593,11 @@ export class DriveSync {
     }
     this.addRemote(path, f, this.vfs.entry(path))
     changed.add(path)
+  }
+
+  private shadow(path: string, f: DriveFile): void {
+    const t = this.twins.get(path)
+    if (!t || newer({ id: f.id, mtime: mtimeOf(f) }, { id: t.id, mtime: mtimeOf(t) })) this.twins.set(path, f)
   }
 
   // Drop a path deleted (or moved away) on Drive, keeping any local edit still waiting to upload.
@@ -567,6 +621,11 @@ export class DriveSync {
     return data
   }
 
+  private keepsBytes(path: string): boolean {
+    const rel = this.rel(path)
+    return rel.startsWith('.smartreader/') || rel.startsWith('knowledge/')
+  }
+
   private async load(e: VfsEntry, range?: [number, number]): Promise<Uint8Array> {
     const id = e.driveId ?? this.meta.get(e.path)?.id
     if (!id) throw new Error(`${e.path} is not on Drive`)
@@ -575,7 +634,9 @@ export class DriveSync {
       let p = this.loads.get(e)
       if (!p) {
         p = this.download(id, e.path).then(data => {
-          if (this.vfs.cacheRemote(e, data) && isMergeable(e.path) && this.meta.get(e.path)?.md5 === (e.md5 ?? null)) {
+          // Book bytes are not kept (a phone tab cannot hold several large books); BookCache serves repeat opens.
+          if (this.vfs.entry(e.path) !== e) this.staleReads.add(e.path)
+          else if (this.keepsBytes(e.path) && this.vfs.cacheRemote(e, data) && isMergeable(e.path) && this.meta.get(e.path)?.md5 === (e.md5 ?? null)) {
             this.baseText.set(e.path, dec(data))
           }
           // a download that works proves the token again
@@ -586,7 +647,9 @@ export class DriveSync {
           return data
         })
         this.loads.set(e, p)
-        p.catch(() => this.loads.delete(e))
+        // Only dedupes concurrent reads: a settled load must not pin the bytes.
+        const done = (): void => void this.loads.delete(e)
+        p.then(done, done)
       }
       return await p
     } catch (err) {

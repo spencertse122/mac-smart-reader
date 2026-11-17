@@ -133,7 +133,7 @@ describe('drive client', () => {
     const params = (i: number) => Object.fromEntries(new URL('https://x' + drive.requests[i].split(' ')[1]).searchParams)
     expect(params(0)).toEqual({
       q: `'${drive.rootId}' in parents and trashed=false`,
-      fields: 'nextPageToken,files(id,name,mimeType,size,md5Checksum,modifiedTime,version,parents)',
+      fields: 'nextPageToken,files(id,name,mimeType,size,md5Checksum,modifiedTime,version,parents,trashed)',
       pageSize: '1000',
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true'

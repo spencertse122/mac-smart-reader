@@ -12,7 +12,8 @@ export type VfsEntry = {
 }
 // A rename has no op of its own: it replays as `remove` for every old path (files, then dirs
 // deepest-first) followed by `mkdir`/`write` for every new path (parents first).
-export type VfsOp = { type: 'write' | 'mkdir' | 'remove'; path: string }
+// `blind`: a write over a Drive version whose bytes were never loaded, so the writer cannot have derived from it.
+export type VfsOp = { type: 'write' | 'mkdir' | 'remove'; path: string; blind?: boolean }
 export type RemoteLoader = (e: VfsEntry, range?: [number, number]) => Promise<Uint8Array>
 
 export const norm = (p: string): string => {
@@ -135,7 +136,8 @@ export class Vfs {
       mtimeMs: opts.mtimeMs ?? Math.max(Date.now(), (prev?.mtimeMs ?? 0) + 1),
       data: copy
     })
-    this.emit({ type: 'write', path: p }, !!opts.fromRemote)
+    const blind = prev?.kind === 'file' && !prev.data
+    this.emit({ type: 'write', path: p, ...(blind ? { blind } : {}) }, !!opts.fromRemote)
   }
 
   private file(path: string, syscall: string): VfsEntry {

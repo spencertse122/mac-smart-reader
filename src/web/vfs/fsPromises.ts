@@ -29,9 +29,11 @@ export class Dirent {
 export function readFile(path: string): Promise<Buffer>
 export function readFile(path: string, opts: BufferEncoding | { encoding: BufferEncoding }): Promise<string>
 export async function readFile(path: string, opts?: Enc): Promise<Buffer | string> {
-  const data = await getVfs().read(path)
-  // Copy: callers may mutate the result, and the VFS bytes must stay intact.
-  const buf = Buffer.from(data)
+  const vfs = getVfs()
+  const data = await vfs.read(path)
+  // Bytes the VFS keeps are copied (callers may mutate the result); a fresh download is wrapped, not copied.
+  const kept = vfs.entry(path)?.data
+  const buf = kept && kept.buffer === data.buffer ? Buffer.from(data) : Buffer.from(data.buffer, data.byteOffset, data.byteLength)
   return wantsString(opts) ? buf.toString('utf8') : buf
 }
 

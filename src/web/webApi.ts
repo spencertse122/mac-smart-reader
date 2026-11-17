@@ -29,6 +29,8 @@ export interface WebApiDeps {
 
 export type WebApi = SmartReaderApi & {
   sync(): DriveSync | null
+  // Resolves once edits already under way are written and queued in the persistent outbox.
+  quiesce(): Promise<void>
   // Survives folder switches, unlike DriveSync.onAuthError.
   onAuthError(cb: () => void): () => void
   dispose(): void
@@ -63,10 +65,17 @@ export function createWebApi(deps: WebApiDeps): WebApi {
     return ws
   }
   // BC4: a failed pull never blocks the edit; the sync layer already swallows network/auth errors.
-  const mutating = async <T>(fn: (w: WebWorkspace) => Promise<T>): Promise<T> => {
-    const w = need()
-    await sync?.pullIfStale()
-    return fn(w)
+  const inflight = new Set<Promise<unknown>>()
+  const mutating = <T>(fn: (w: WebWorkspace) => Promise<T>): Promise<T> => {
+    const p = (async () => {
+      const w = need()
+      await sync?.pullIfStale()
+      return fn(w)
+    })()
+    inflight.add(p)
+    const done = (): void => void inflight.delete(p)
+    p.then(done, done)
+    return p
   }
 
   const pullNow = (): void => {
@@ -115,6 +124,10 @@ export function createWebApi(deps: WebApiDeps): WebApi {
   const api: WebApi = {
     platform: 'web',
     sync: () => sync,
+    async quiesce() {
+      while (inflight.size) await Promise.allSettled([...inflight])
+      await sync?.persisted()
+    },
     onAuthError: cb => (subs.auth.add(cb), () => void subs.auth.delete(cb)),
     dispose() {
       if (timer) {
@@ -180,7 +193,8 @@ export function createWebApi(deps: WebApiDeps): WebApi {
           readingId = null
           off?.()
         }
-        const data = new Uint8Array(r.data)
+        // A view, not a copy: the bytes are this read's own (the VFS does not keep book bytes).
+        const data = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength)
         if (key) await deps.cache.put(key, data)
         return { name: r.name, data }
       },

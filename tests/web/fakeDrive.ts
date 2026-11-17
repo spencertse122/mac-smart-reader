@@ -89,6 +89,18 @@ export class FakeDrive {
     this.log.push(e.meta.id)
   }
 
+  // A second file of the same name in the same folder (Drive allows it), optionally with a set modifiedTime.
+  addTwin(path: string, data: Uint8Array, modifiedTime?: string): string {
+    const parts = path.split('/').filter(Boolean)
+    const name = parts.pop()!
+    const e: Entry = { meta: this.mk(name, 'application/octet-stream', [this.ensureDir(parts, this.rootId)]) }
+    this.setData(e, data)
+    if (modifiedTime) e.meta.modifiedTime = modifiedTime
+    this.entries.set(e.meta.id, e)
+    this.log.push(e.meta.id)
+    return e.meta.id
+  }
+
   readFile(path: string): Uint8Array {
     const parts = path.split('/').filter(Boolean)
     let id = this.rootId

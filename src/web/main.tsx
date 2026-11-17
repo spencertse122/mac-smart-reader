@@ -26,7 +26,15 @@ const savedFolder = (): PickedFolder | null => {
   }
 }
 
-const auth = createAuth(clientId)
+const auth = createAuth(clientId, {
+  // A redirect sign-in (home-screen app) reloads the page: get every edit into the outbox first.
+  beforeRedirect: async () => {
+    // The reader saves its debounced position on pagehide; let it start before waiting.
+    window.dispatchEvent(new Event('pagehide'))
+    await new Promise(r => setTimeout(r, 0))
+    await api.quiesce()
+  }
+})
 const cache = idbBookCache()
 const rawDrive = createDriveClient({
   fetch: (i, init) => fetch(i, init),
@@ -64,10 +72,9 @@ const api = createWebApi({
 })
 api.account = {
   email: () => auth.email(),
-  switchFolder: async () => void (await api.library.chooseFolder()),
   async signOut() {
     const n = api.sync()?.pending() ?? 0
-    if (n > 0 && !confirm(`${n} change${n === 1 ? '' : 's'} haven't synced to Google Drive yet. They stay on this device and sync after you sign in again. Sign out anyway?`)) return
+    if (n > 0 && !confirm(`${n} change${n === 1 ? '' : 's'} (notes, highlights or progress) haven't synced to Google Drive yet. They stay saved on this device until you next sign in here, then sync. Sign out anyway?`)) return
     await signOut()
     location.reload()
   }

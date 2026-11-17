@@ -8,6 +8,7 @@ import { createDriveClient } from '../../src/web/drive/client'
 import { idbOutbox } from '../../src/web/sync/outbox'
 import { idbBookCache } from '../../src/web/bookCache'
 import { createWebApi, type WebApi } from '../../src/web/webApi'
+import { getVfs } from '../../src/web/vfs/vfs'
 
 type Dump = {
   books: Array<{ id: string; title: string; location: string | null; progress: number }>
@@ -95,6 +96,19 @@ describe('web api', () => {
     expect(r.name).toBe(b.path.split('/').pop())
   })
 
+  it('readBook leaves no book bytes in the VFS (the IndexedDB cache serves repeat opens)', async () => {
+    const b = seed.books.find(x => x.id === seed.epubId)!
+    n++ // an empty book cache, so the read goes through the VFS
+    const fresh = makeApi()
+    await fresh.library.open('/library')
+    const r = await fresh.library.readBook(seed.epubId)
+    expect(r.data.length).toBeGreaterThan(0)
+    expect(fake.requests.some(q => q.includes('alt=media'))).toBe(true)
+    expect(getVfs().entry(`/library/${b.path}`)?.data).toBeUndefined()
+    // .smartreader data is still kept after a read
+    expect(getVfs().entry('/library/.smartreader/library.json')?.data).toBeTruthy()
+  })
+
   it('rate on web → Mac services see the review-state change and the log line', async () => {
     const before = dumpFake()
     const events: string[] = []
@@ -125,6 +139,18 @@ describe('web api', () => {
     expect(ids).toEqual(expect.arrayContaining([seed.highlightId, h.id, 'h_mac-second']))
     const d = dumpFake()
     expect(d.highlights[seed.epubId].map(x => x.id)).toEqual(expect.arrayContaining([seed.highlightId, h.id, 'h_mac-second']))
+  })
+
+  it('quiesce waits until an edit under way is in the persistent outbox (before a redirect sign-in)', async () => {
+    const slug = seed.books.find(b => b.id === seed.epubId)!.slug
+    fake.expireToken() // offline/expired: the edit stays queued
+    void api.highlights.add(seed.epubId, {
+      location: 'epubcfi(/6/10!/4/2/1:0)', quote: { exact: 'queued', prefix: '', suffix: '' }, context: 'queued',
+      chapter: 'c2', position: 0.3, color: 'blue', note: null
+    })
+    await api.quiesce()
+    const queued = await idbOutbox(`webapi-outbox-${prefix}-${fake.rootId}`).all()
+    expect(queued.map(i => i.path)).toContain(`/library/.smartreader/books/${slug}/highlights.json`)
   })
 
   it('a failed folder switch leaves the previous library working', async () => {

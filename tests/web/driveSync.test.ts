@@ -111,6 +111,8 @@ describe('DriveSync', () => {
 
   it('tmp and .bak never reach Drive', async () => {
     const sync = await mounted()
+    // read first, as the services do: a write over never-loaded bytes is merged instead (I1)
+    await fs.readFile(`${SR}/library.json`)
     await writeJson(`${SR}/library.json`, { version: 1, books: {} })
     await writeJson(`${SR}/fresh.json`, { a: 1 })
     await sync.flush()
@@ -420,6 +422,100 @@ describe('DriveSync', () => {
       expect(await sync.pull()).toBe(true)
       expect(ids(JSON.parse(await fs.readFile(P, 'utf8')))).toEqual(['w_A', 'w_R', seed.wordId].sort())
     })
+    // I1: a pull lands while a service is still downloading the version it is about to edit.
+    async function racingPull(): Promise<DriveSync> {
+      let hook: (() => Promise<void>) | undefined
+      const hooked: FakeDrive['fetch'] = async (input, init) => {
+        const res = await fake.fetch(input, init)
+        if (hook && String(input).includes('alt=media')) {
+          const h = hook
+          hook = undefined
+          await h()
+        }
+        return res
+      }
+      const sync = await mounted({ drive: makeClient(hooked) })
+      const v0 = remoteJson(fake, '.smartreader/vocab.json')
+      hook = async () => {
+        fake.putFile('.smartreader/vocab.json', encJ({ ...v0, words: [...v0.words, { ...v0.words[0], id: 'w_R' }] }))
+        expect(await sync.pull()).toBe(true)
+      }
+      return sync
+    }
+
+    it('an edit of bytes a racing pull replaced is merged, not pushed over the newer version', async () => {
+      const sync = await racingPull()
+      await addWord('w_A')
+      await sync.flush()
+      expect(ids(remoteJson(fake, '.smartreader/vocab.json'))).toEqual(['w_A', 'w_R', seed.wordId].sort())
+      expect(ids(JSON.parse(await fs.readFile(P, 'utf8')))).toEqual(['w_A', 'w_R', seed.wordId].sort())
+    })
+
+    it('the same holds when another reader cached the newer version before the stale write', async () => {
+      const sync = await racingPull()
+      const stale = JSON.parse(await fs.readFile(P, 'utf8'))
+      await fs.readFile(P) // someone else reads (and caches) the newer version
+      stale.words.push({ ...stale.words[0], id: 'w_A', updatedAt: new Date().toISOString() })
+      await writeJson(P, stale)
+      await sync.flush()
+      expect(ids(remoteJson(fake, '.smartreader/vocab.json'))).toEqual(['w_A', 'w_R', seed.wordId].sort())
+    })
+  })
+
+  describe('twin names on Drive (I6b)', () => {
+    const V = '.smartreader/vocab.json'
+    const enc = (v: unknown) => new TextEncoder().encode(JSON.stringify(v))
+    const local = async (p: string) => JSON.parse(await fs.readFile(`${L}/${p}`, 'utf8'))
+
+    it('mount takes the newest of two same-name files, whichever is listed first', async () => {
+      fake.addTwin(V, enc({ twin: 'newer' }), '2099-01-01T00:00:00.000Z')
+      fake.addTwin('.smartreader/other.json', enc({ twin: 'newer' }), '2099-01-01T00:00:00.000Z')
+      fake.addTwin('.smartreader/other.json', enc({ twin: 'older' }), '2000-01-01T00:00:00.000Z')
+      await mounted()
+      expect(await local(V)).toEqual({ twin: 'newer' })
+      expect(await local('.smartreader/other.json')).toEqual({ twin: 'newer' })
+    })
+
+    it('a change to an older twin never replaces the newer one we use; a newer twin does', async () => {
+      const sync = await mounted()
+      const before = await local(V)
+      fake.addTwin(V, enc({ twin: 'older' }), '2000-01-01T00:00:00.000Z')
+      await sync.pull()
+      expect(await local(V)).toEqual(before)
+      fake.addTwin(V, enc({ twin: 'newer' }), '2099-01-01T00:00:00.000Z')
+      await sync.pull()
+      expect(await local(V)).toEqual({ twin: 'newer' })
+    })
+
+    it('when the file we use is trashed, a twin we passed over takes its place', async () => {
+      const sync = await mounted()
+      const ours = (await drive.listChildren((await drive.listChildren(fake.rootId)).find(f => f.name === '.smartreader')!.id)).find(f => f.name === 'vocab.json')!
+      fake.addTwin(V, enc({ twin: 'older' }), '2000-01-01T00:00:00.000Z')
+      await sync.pull()
+      await drive.trash(ours.id)
+      expect(await sync.pull()).toBe(true)
+      expect(await local(V)).toEqual({ twin: 'older' })
+    })
+
+    it('a push of a file new here adopts the newest twin on Drive', async () => {
+      const sync = await mounted()
+      fake.addTwin('.smartreader/x.json', enc({ older: 1 }), '2000-01-01T00:00:00.000Z')
+      fake.addTwin('.smartreader/x.json', enc({ newer: 1 }), '2099-01-01T00:00:00.000Z')
+      await writeJson(`${SR}/x.json`, { a: 1 })
+      await sync.flush()
+      expect(await local('.smartreader/x.json')).toEqual({ a: 1, newer: 1 })
+    })
+  })
+
+  it('a push to a file trashed on Drive since the last pull recreates it instead of editing the trashed copy', async () => {
+    const sync = await mounted()
+    const sr = (await drive.listChildren(fake.rootId)).find(f => f.name === '.smartreader')!
+    const vocab = (await drive.listChildren(sr.id)).find(f => f.name === 'vocab.json')!
+    await fs.readFile(`${SR}/vocab.json`)
+    await drive.trash(vocab.id)
+    await writeJson(`${SR}/vocab.json`, { version: 1, words: [] })
+    await sync.flush()
+    expect(remoteJson(fake, '.smartreader/vocab.json')).toEqual({ version: 1, words: [] })
   })
 
   it('a non-auth push failure keeps the outbox, is reported, and flush rejects instead of hanging', async () => {

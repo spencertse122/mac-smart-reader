@@ -15,7 +15,8 @@ describe('SignIn', () => {
     const auth = {
       status: () => (calls++ === 0 ? 'loading' : 'ready'),
       onChange: () => () => {},
-      signIn: async () => {}
+      signIn: async () => {},
+      redirectError: () => null
     } as unknown as Auth
     const host = document.createElement('div')
     document.body.appendChild(host)

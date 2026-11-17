@@ -4,7 +4,7 @@ import type { Auth } from '../auth/gis'
 
 export function SignIn({ auth, clientId }: { auth: Auth; clientId: string }) {
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => auth.redirectError())
   const [status, setStatus] = useState(auth.status())
   useEffect(() => {
     // GIS may finish loading between the first render and this subscription; its change event is gone by then.

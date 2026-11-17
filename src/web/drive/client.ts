@@ -23,7 +23,7 @@ export type DriveClient = {
 const API = 'https://www.googleapis.com/drive/v3'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
 // Exported so the fake Drive can reject any request that deviates from these exact strings.
-export const FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,version,parents'
+export const FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,version,parents,trashed'
 export const LIST_FIELDS = `nextPageToken,files(${FILE_FIELDS})`
 export const CHANGE_FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,parents,trashed'
 export const CHANGES_FIELDS = `newStartPageToken,nextPageToken,changes(fileId,removed,file(${CHANGE_FILE_FIELDS}))`
