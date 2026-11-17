@@ -654,6 +654,51 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       if (changed) highlightsChanged()
     }
 
+    // 7b. Highlights changed elsewhere (the other device via Drive, the panel, a Mac window focus):
+    // re-list and redraw only what differs, leaving the position, selection and popup alone.
+    let listed = false
+    let refreshSeq = 0
+    const refreshHighlights = async (): Promise<void> => {
+      if (!listed || disposed) return
+      const seq = ++refreshSeq
+      const before = new Map([...byValue.current.values()].map(h => [h.id, h]))
+      let list: Highlight[]
+      try {
+        list = drawable(await window.api.highlights.list(bookId))
+      } catch {
+        return
+      }
+      if (disposed || seq !== refreshSeq) return
+      const fresh = new Map(list.map(h => [h.id, h]))
+      let changed = false
+      for (const [value, h] of [...byValue.current]) {
+        // Created, edited or re-anchored here while the list was in flight: this view is newer.
+        if (before.get(h.id) !== h) continue
+        const n = fresh.get(h.id)
+        if (!n) {
+          byValue.current.delete(value)
+          lostAnchors.delete(h.id)
+          unannotate(value)
+          changed = true
+        } else if (n.color !== h.color || n.note !== h.note || n.updatedAt !== h.updatedAt) {
+          // Keep the key it is drawn under: a local re-anchor may not have reached the list yet.
+          byValue.current.set(value, { ...n, location: value })
+          if (n.color !== h.color) annotate(value, n.color)
+          changed = true
+        }
+      }
+      const have = new Set([...byValue.current.values()].map(h => h.id))
+      for (const n of list) {
+        // `before` without `have`: deleted here while the list was in flight.
+        if (have.has(n.id) || before.has(n.id) || byValue.current.has(n.location)) continue
+        byValue.current.set(n.location, n)
+        annotate(n.location, n.color)
+        changed = true
+      }
+      if (changed) highlightsChanged()
+    }
+    cleanups.push(window.api.on.reviewChanged(() => void refreshHighlights()))
+
     void (async () => {
       let file: File
       let Overlayer: FoliateOverlayer
@@ -716,6 +761,7 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
         byValue.current = new Map()
       }
       if (disposed) return
+      listed = true
 
       // 4. Go to the deep-link target, else the saved position, else the start of the text.
       const loc = initial.current.target ?? initial.current.location ?? undefined

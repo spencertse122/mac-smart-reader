@@ -1,4 +1,4 @@
-import { test, expect, signIn, openContinue, highlightSentence, showToolbar, pending, json, LIB } from './fixtures'
+import { test, expect, signIn, openContinue, highlightSentence, showToolbar, pending, json, readerCfi, tapText, LIB } from './fixtures'
 
 const normal = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
@@ -57,4 +57,65 @@ test('an expired token mid-session queues edits, and reconnecting flushes them t
   await expect(banner).toHaveCount(0)
   await expect.poll(onDrive).toContain(quote)
   await expect.poll(() => pending(page)).toBe(0)
+})
+
+test('a highlight made on the Mac appears in the open book, and goes when the Mac deletes it, without moving the reader', async ({ page, fake, seed }) => {
+  await signIn(page)
+  const frame = await openContinue(page)
+  const epub = seed.books.find(b => b.id === seed.epubId)!
+  const path = `${LIB}/.smartreader/books/${epub.slug}/highlights.json`
+  type View = { renderer: { getContents(): Array<{ index: number; doc: Document; overlayer?: { element: SVGElement } }> }; getCFI(i: number, r: Range): string }
+  // Highlight shapes drawn on the section on screen.
+  const marks = (): Promise<number> =>
+    page.evaluate(() => {
+      const view = document.querySelector('foliate-view') as unknown as View
+      return view.renderer.getContents().reduce((n, c) => n + (c.overlayer?.element.childElementCount ?? 0), 0)
+    })
+  // The CFI of a sentence on screen, as the Mac would have stored it.
+  const target = await page.evaluate(() => {
+    const view = document.querySelector('foliate-view') as unknown as View
+    const { index, doc } = view.renderer.getContents()[0]
+    const fr = (doc.defaultView!.frameElement as HTMLElement).getBoundingClientRect()
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+    let node: Node | null
+    while ((node = walker.nextNode())) {
+      const t = node.textContent ?? ''
+      const i = t.search(/\S/)
+      if (t.trim().length < 45) continue
+      const r = doc.createRange()
+      r.setStart(node, i)
+      r.setEnd(node, i + 40)
+      const rr = r.getBoundingClientRect()
+      if (rr.left + fr.left < 0 || rr.right + fr.left > innerWidth || rr.top + fr.top < 150 || rr.top + fr.top > innerHeight - 150) continue
+      return { cfi: view.getCFI(index, r), text: r.toString() }
+    }
+    throw new Error('no visible sentence')
+  })
+  const start = await readerCfi(page)
+  const drawn = await marks()
+
+  const file = json(fake, path)
+  const now = new Date().toISOString()
+  const mac = {
+    id: 'h_on-the-page', location: target.cfi, quote: { exact: target.text, prefix: '', suffix: '' }, context: target.text,
+    chapter: 'Laying Plans', position: 0.06, color: 'green', note: null, createdAt: now, updatedAt: now, deleted: false
+  }
+  file.highlights.push(mac)
+  fake.putFile(path, new TextEncoder().encode(JSON.stringify(file, null, 2)))
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect.poll(marks).toBe(drawn + 1)
+  expect(await readerCfi(page)).toBe(start)
+  // It is a real highlight: tapping it opens the edit popup.
+  await tapText(page, frame, target.text.replace(/\s+/g, ' ').trim())
+  await expect(page.getByTestId('hl-delete')).toBeVisible()
+
+  // The Mac deletes it; the popup the reader has open is left alone.
+  const later = json(fake, path)
+  const gone = later.highlights.find((h: { id: string }) => h.id === mac.id)
+  Object.assign(gone, { deleted: true, updatedAt: new Date(Date.now() + 1000).toISOString() })
+  fake.putFile(path, new TextEncoder().encode(JSON.stringify(later, null, 2)))
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect.poll(marks).toBe(drawn)
+  await expect(page.getByTestId('hl-popup')).toBeVisible()
+  expect(await readerCfi(page)).toBe(start)
 })
