@@ -10,3 +10,9 @@ it('emits theme colors, font, size and line height', () => {
   expect(css).toContain('New York')
   expect(readerCss({ readerTheme: 'night', fontFamily: 'sans', fontSize: 18, lineHeight: 1.5 })).toContain('color-scheme: dark')
 })
+
+it('cancels forced page breaks at the start and end of a section', () => {
+  const css = readerCss({ readerTheme: 'white', fontFamily: 'serif', fontSize: 18, lineHeight: 1.5 })
+  expect(css).toMatch(/body > :first-child[^{]*\{\s*break-before: auto !important; page-break-before: auto !important;/)
+  expect(css).toMatch(/body > :last-child[^{]*\{\s*break-after: auto !important; page-break-after: auto !important;/)
+})

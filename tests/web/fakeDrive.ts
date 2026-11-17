@@ -239,7 +239,8 @@ export class FakeDrive {
     let match: (e: Entry) => boolean
     let m: RegExpMatchArray | null
     if ((m = q.match(new RegExp(`^${Q} in parents and trashed=false$`)))) {
-      const id = unq(m[1])
+      // like real Drive, 'root' names the top of My Drive
+      const id = unq(m[1]) === 'root' ? this.rootId : unq(m[1])
       match = (e) => e.meta.parents[0] === id && !e.meta.trashed
     } else if ((m = q.match(new RegExp(`^name=${Q} and mimeType='${FOLDER}' and trashed=false$`)))) {
       const name = unq(m[1])

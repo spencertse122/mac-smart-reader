@@ -6,7 +6,11 @@ export function SignIn({ auth, clientId }: { auth: Auth; clientId: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState(auth.status())
-  useEffect(() => auth.onChange(() => setStatus(auth.status())), [auth])
+  useEffect(() => {
+    // GIS may finish loading between the first render and this subscription; its change event is gone by then.
+    setStatus(auth.status())
+    return auth.onChange(() => setStatus(auth.status()))
+  }, [auth])
   const go = async (): Promise<void> => {
     setBusy(true)
     setError(null)

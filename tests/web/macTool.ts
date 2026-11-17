@@ -38,7 +38,7 @@ const commands: Record<string, Command> = {
       ws.close()
     }
   },
-  // A small but real library: books, one highlight, one word, a saved position and one review.
+  // A small but real library: books, one highlight, one word, a saved (last opened) position and one review.
   async seed(dir) {
     mkdirSync(dir, { recursive: true })
     for (const n of readdirSync(FIXTURES)) copyFileSync(join(FIXTURES, n), join(dir, n))
@@ -63,6 +63,7 @@ const commands: Record<string, Command> = {
       })
       const location = 'epubcfi(/6/8!/4/2/1:0)'
       await ws.library.saveProgress(epub.id, location, 0.12)
+      await ws.library.markOpened(epub.id)
       await ws.review.rate(highlight.id, 'good', 4000, 'highlight')
       return { books: books.map(b => ({ id: b.id, path: b.path, slug: b.slug })), epubId: epub.id, highlightId: highlight.id, wordId: word.id, location }
     } finally {

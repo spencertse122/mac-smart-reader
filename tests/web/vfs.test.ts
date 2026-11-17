@@ -3,6 +3,7 @@ import { Vfs } from '../../src/web/vfs/vfs'
 import { setVfs } from '../../src/web/vfs/vfs'
 import * as fs from '../../src/web/vfs/fsPromises'
 import { watchFile, unwatchFile } from '../../src/web/vfs/fs'
+import { writeFileAtomic } from '../../src/main/store/atomic'
 
 let vfs: Vfs
 beforeEach(() => {
@@ -170,5 +171,20 @@ describe('vfs', () => {
     expect(vfs.entry('/lib/d/r.txt')).toBeUndefined()
     expect(vfs.entry('/lib')).toBeTruthy()
     expect(ops).toEqual(['any remove /lib/d/s.txt', 'any remove /lib/d/r.txt', 'any remove /lib/d'])
+  })
+
+  it('an atomic write over a never-downloaded file needs no download (works with Drive unreachable)', async () => {
+    const loader = vi.fn(async () => {
+      throw new Error('Drive authorization failed')
+    })
+    vfs.setRemoteLoader(loader)
+    vfs.putRemote({ path: '/lib/h.md', kind: 'file', driveId: 'D1', size: 4, mtimeMs: 5 })
+    await writeFileAtomic('/lib/h.md', 'new')
+    expect(loader).not.toHaveBeenCalled()
+    expect(await fs.readFile('/lib/h.md', 'utf8')).toBe('new')
+    expect(vfs.entry('/lib/h.md.bak')).toBeUndefined()
+    // a downloaded file is still backed up
+    await writeFileAtomic('/lib/h.md', 'newer')
+    expect(await fs.readFile('/lib/h.md.bak', 'utf8')).toBe('new')
   })
 })

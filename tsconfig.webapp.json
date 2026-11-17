@@ -4,5 +4,5 @@
     "strict": true, "skipLibCheck": true, "esModuleInterop": true, "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["node", "vite/client"], "noEmit": true
   },
-  "include": ["src/web/**/*", "src/shared/**/*", "src/renderer/src/**/*", "tests/web/**/*", "web.aliases.ts", "vite.web.config.ts", "vitest.web.config.ts"]
+  "include": ["src/web/**/*", "src/shared/**/*", "src/renderer/src/**/*", "tests/web/**/*", "tests/web-e2e/**/*", "playwright.web.config.ts", "web.aliases.ts", "vite.web.config.ts", "vitest.web.config.ts"]
 }

@@ -56,7 +56,7 @@ export function StatsView() {
               <Kpi label="Fresh items per hour" value={formatRate(stats.knowledgePerHour)} sub="last 30 days" testId="kpi-rate" />
               <Kpi label="Fresh in mind" value={stats.K.toFixed(1)} sub="items likely still fresh today" />
               <Kpi label="Due today" value={String(stats.dueToday)} sub="cards" />
-              <Kpi label="Streak" value={`${stats.streakDays} ${stats.streakDays === 1 ? 'day' : 'days'}`} sub="consecutive days" />
+              <Kpi label="Streak" value={`${stats.streakDays} ${stats.streakDays === 1 ? 'day' : 'days'}`} sub="consecutive days" testId="kpi-streak" />
             </div>
             <p className="stats-explainer">
               Fresh in mind = how many of your highlights and notes are likely still fresh, based on when you last saw them in Review. Each item starts counting after its first review; reviewing keeps it fresh.

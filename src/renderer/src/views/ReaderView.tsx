@@ -131,9 +131,11 @@ export function ReaderView({ bookId, target }: { bookId: string; target?: string
       hideTimer.current = setTimeout(() => {
         const o = overlays.current
         if (o.popup || o.toc || o.menu || o.composer || o.sheet) return
-        // A popover inside the toolbar (Pomodoro options) or a focused field there keeps it up.
+        // A popover inside the toolbar (Pomodoro options) or a text field being typed in there keeps it up.
+        // Only fields: a tapped button keeps focus on Android, which would pin the toolbar for good.
         const bar = rootRef.current?.querySelector('.reader-toolbar')
-        if (mobileRef.current && bar && (bar.querySelector('.pomo-pop') || bar.contains(document.activeElement))) return arm()
+        const typing = document.activeElement?.matches('input, textarea, select') && bar?.contains(document.activeElement)
+        if (mobileRef.current && bar && (bar.querySelector('.pomo-pop') || typing)) return arm()
         setChrome(false)
       }, mobileRef.current ? MOBILE_CHROME_HIDE_MS : CHROME_HIDE_MS)
     }

@@ -74,6 +74,10 @@ export async function rename(from: string, to: string): Promise<void> {
 
 export async function copyFile(from: string, to: string): Promise<void> {
   const vfs = getVfs()
+  const src = vfs.stat(from, 'copyfile')
+  // writeFileAtomic's .bak of a file never downloaded: Drive still holds that version, and fetching it
+  // would make the write fail offline or with an expired token.
+  if (to.endsWith('.bak') && src.kind === 'file' && !src.data) return
   vfs.writeLocal(to, await vfs.read(from))
 }
 

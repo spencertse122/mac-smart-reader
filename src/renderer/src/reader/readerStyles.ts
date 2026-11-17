@@ -30,5 +30,12 @@ export function readerCss(s: Pick<Settings, 'readerTheme' | 'fontFamily' | 'font
     img, svg, video { max-width: 100%; height: auto; }
     p { hyphens: auto; -webkit-hyphens: auto; }
     ::selection { background: rgba(10, 132, 255, 0.28); }
+    /* WebKit honours a forced break at the very start (or end) of a section as an empty page. */
+    body > :first-child, body > :first-child > :first-child, body > :first-child > :first-child > :first-child {
+      break-before: auto !important; page-break-before: auto !important;
+    }
+    body > :last-child, body > :last-child > :last-child, body > :last-child > :last-child > :last-child {
+      break-after: auto !important; page-break-after: auto !important;
+    }
   `
 }
