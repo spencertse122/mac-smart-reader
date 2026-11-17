@@ -97,6 +97,30 @@ export class Vfs {
     if (prev && (prev.size !== e.size || prev.mtimeMs !== e.mtimeMs)) this.emit({ type: 'write', path: p }, true)
   }
 
+  // Sync layer: keep bytes fetched by the remote loader. Only if `e` is still the live, unloaded
+  // entry, so a load that raced a local write never replaces newer data. Not a change: no events.
+  cacheRemote(e: VfsEntry, data: Uint8Array): boolean {
+    if (this.entries.get(e.path) !== e || e.data) return false
+    e.data = data
+    return true
+  }
+
+  // Sync layer: record Drive identity for a local entry (after a push). Not a change: no events.
+  annotate(path: string, meta: { driveId?: string; md5?: string }): void {
+    const e = this.entries.get(norm(path))
+    if (e) Object.assign(e, meta)
+  }
+
+  // Sync layer: a file or folder deleted on Drive. Emits remote removes (children first).
+  dropRemote(path: string): void {
+    const p = norm(path)
+    const gone = [...this.entries.values()].filter(e => e.path === p || e.path.startsWith(`${p}/`)).sort((a, b) => (a.path < b.path ? 1 : -1))
+    for (const e of gone) {
+      this.entries.delete(e.path)
+      this.emit({ type: 'remove', path: e.path }, true)
+    }
+  }
+
   writeLocal(path: string, data: Uint8Array, opts: { fromRemote?: boolean; mtimeMs?: number } = {}): void {
     const p = norm(path)
     const prev = this.entries.get(p)

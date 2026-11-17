@@ -14,6 +14,7 @@ export type DriveClient = {
   createFolder(name: string, parentId: string): Promise<DriveFile>
   createFile(name: string, parentId: string, data: Uint8Array): Promise<DriveFile>
   updateFile(id: string, data: Uint8Array): Promise<DriveFile>
+  trash(id: string): Promise<void>
   findFoldersNamed(name: string): Promise<DriveFile[]>
   startPageToken(): Promise<string>
   changes(token: string): Promise<{ changes: DriveChange[]; newStartPageToken: string }>
@@ -161,6 +162,14 @@ export function createDriveClient(opts: {
         `${UPLOAD}/files/${encodeURIComponent(id)}?${qs({ uploadType: 'media', fields: FILE_FIELDS, supportsAllDrives: 'true' })}`,
         { method: 'PATCH', headers: { 'Content-Type': 'application/octet-stream' }, body: data as BodyInit }
       ),
+
+    async trash(id) {
+      await request(`${API}/files/${encodeURIComponent(id)}?${fileQs}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trashed: true })
+      })
+    },
 
     async startPageToken() {
       const r = await json<{ startPageToken: string }>(`${API}/changes/startPageToken?${qs({ supportsAllDrives: 'true' })}`)

@@ -197,4 +197,15 @@ describe('drive client', () => {
     })
     expect((await res.json()).mimeType).not.toBe(FOLDER_MIME)
   })
+
+  it('trash moves a file to the trash (PATCH trashed:true)', async () => {
+    const { drive, client } = setup()
+    drive.putFile('gone.txt', enc('x'))
+    const [file] = await client.listChildren(drive.rootId)
+    await client.trash(file.id)
+    expect(await client.listChildren(drive.rootId)).toEqual([])
+    expect(drive.requests.at(-2)).toMatch(/^PATCH \/drive\/v3\/files\//)
+    const { changes } = await client.changes('0')
+    expect(changes.at(-1)?.file?.trashed).toBe(true)
+  })
 })

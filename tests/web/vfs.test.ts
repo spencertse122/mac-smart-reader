@@ -148,4 +148,27 @@ describe('vfs', () => {
     expect(buf.toString()).toBe('456')
     expect(loader).toHaveBeenLastCalledWith(expect.objectContaining({ driveId: 'D1' }), [4, 7])
   })
+
+  it('cacheRemote stores loaded bytes silently; dropRemote removes a subtree as a remote change', async () => {
+    const ops: string[] = []
+    vfs.onLocalChange(op => ops.push(`local ${op.type} ${op.path}`))
+    vfs.onChange(op => ops.push(`any ${op.type} ${op.path}`))
+    vfs.putRemote({ path: '/lib/d/r.txt', kind: 'file', driveId: 'D1', size: 2, mtimeMs: 5, md5: 'm' })
+    const e = vfs.entry('/lib/d/r.txt')!
+    expect(vfs.cacheRemote(e, new TextEncoder().encode('hi'))).toBe(true)
+    expect(vfs.entry('/lib/d/r.txt')).toMatchObject({ mtimeMs: 5, md5: 'm', driveId: 'D1' })
+    expect(await fs.readFile('/lib/d/r.txt', 'utf8')).toBe('hi')
+    // a stale load never replaces a newer local write
+    vfs.putRemote({ path: '/lib/d/s.txt', kind: 'file', driveId: 'D2', size: 1, mtimeMs: 5 })
+    const stale = vfs.entry('/lib/d/s.txt')!
+    vfs.writeLocal('/lib/d/s.txt', new TextEncoder().encode('new'))
+    expect(vfs.cacheRemote(stale, new TextEncoder().encode('o'))).toBe(false)
+    expect(await fs.readFile('/lib/d/s.txt', 'utf8')).toBe('new')
+    ops.length = 0
+    vfs.dropRemote('/lib/d')
+    expect(vfs.entry('/lib/d')).toBeUndefined()
+    expect(vfs.entry('/lib/d/r.txt')).toBeUndefined()
+    expect(vfs.entry('/lib')).toBeTruthy()
+    expect(ops).toEqual(['any remove /lib/d/s.txt', 'any remove /lib/d/r.txt', 'any remove /lib/d'])
+  })
 })
