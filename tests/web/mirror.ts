@@ -34,3 +34,8 @@ export function seedFake(fake: FakeDrive): SeedSummary {
   fake.seedFromDir(cached.dir)
   return cached.summary
 }
+
+// Writes the fake Drive's tree into a real directory so the Mac services can read what the web pushed.
+export function downloadTree(fake: FakeDrive, dir: string): void {
+  fake.writeTree(dir)
+}

@@ -1,6 +1,6 @@
 // In-memory Google Drive v3 stand-in. Plain Node/TS: used by vitest and by Playwright (via page.route).
 import { createHash } from 'crypto'
-import { readdirSync, readFileSync, statSync } from 'fs'
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { CHANGES_FIELDS, FILE_FIELDS, LIST_FIELDS } from '../../src/web/drive/client'
 
@@ -114,6 +114,16 @@ export class FakeDrive {
         this.entries.set(e.meta.id, e)
         this.log.push(e.meta.id)
       }
+    }
+  }
+
+  // Writes the live (non-trashed) tree under the root into a real directory.
+  writeTree(dir: string, parentId: string = this.rootId) {
+    mkdirSync(dir, { recursive: true })
+    for (const e of this.entries.values()) {
+      if (e.meta.parents[0] !== parentId || e.meta.trashed) continue
+      if (e.meta.mimeType === FOLDER) this.writeTree(join(dir, e.meta.name), e.meta.id)
+      else writeFileSync(join(dir, e.meta.name), e.data ?? new Uint8Array())
     }
   }
 

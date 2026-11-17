@@ -1,29 +1,39 @@
 import './shims/buffer'
 import { createRoot } from 'react-dom/client'
-import type { SmartReaderApi } from '../shared/api'
+import { createDriveClient, DriveAuthError } from './drive/client'
+import { idbOutbox } from './sync/outbox'
+import { idbBookCache } from './bookCache'
+import { createWebApi } from './webApi'
 import { App } from '../renderer/src/App'
 import { AppStateProvider } from '../renderer/src/state/appState'
 import '../renderer/src/styles/tokens.css'
 import '../renderer/src/styles/global.css'
 
-// Placeholder so the shared renderer can mount; the real VFS-backed api replaces it.
-const unsupported = (): never => {
-  throw new Error('Not implemented on web yet')
+// Auth and the folder picker arrive with the Connect flow; until then there is no token and no folder.
+const FOLDER_KEY = 'sr.web.folder'
+type Folder = { id: string; name: string }
+const savedFolder = (): Folder | null => {
+  try {
+    return JSON.parse(localStorage.getItem(FOLDER_KEY) ?? 'null') as Folder | null
+  } catch {
+    return null
+  }
 }
-const off = (): (() => void) => () => undefined
-const stub = new Proxy({}, { get: () => unsupported }) as never
-window.api = {
-  platform: 'web',
-  settings: stub,
-  library: stub,
-  highlights: stub,
-  vocab: stub,
-  review: stub,
-  sessions: stub,
-  stats: stub,
-  pty: stub,
-  on: { reviewChanged: off, libraryChanged: off, toast: off, menu: off }
-} satisfies SmartReaderApi
+
+window.api = createWebApi({
+  drive: createDriveClient({ fetch: (i, init) => fetch(i, init), getToken: () => { throw new DriveAuthError('Not signed in') } }),
+  outbox: idbOutbox(),
+  pickFolder: async () => null,
+  savedFolder,
+  rememberFolder: f => {
+    try {
+      localStorage.setItem(FOLDER_KEY, JSON.stringify(f))
+    } catch {
+      // storage unavailable
+    }
+  },
+  cache: idbBookCache()
+})
 
 createRoot(document.getElementById('root')!).render(
   <AppStateProvider>

@@ -1,6 +1,6 @@
 // Runs the real Mac services against the real disk, in a child process (the web vitest process
 // aliases node:fs to the VFS). Usage: jiti tests/web/macTool.ts <command> <dir> [args...]
-import { copyFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Workspace } from '../../src/main/workspace'
 
@@ -17,6 +17,27 @@ const openWs = (dir: string) =>
 type Command = (dir: string, args: string[]) => Promise<unknown>
 
 const commands: Record<string, Command> = {
+  // What the real Mac services see in a folder: used to check web edits round-trip through Drive.
+  async dump(dir) {
+    const ws = await openWs(dir)
+    try {
+      const books = await ws.library.list()
+      const highlights: Record<string, unknown[]> = {}
+      for (const b of books) highlights[b.id] = await ws.highlights.list(b.id)
+      const cards = JSON.parse(readFileSync(join(dir, '.smartreader', 'review-state.json'), 'utf8'))
+      const logPath = join(dir, '.smartreader', 'review-log.jsonl')
+      const log = existsSync(logPath) ? readFileSync(logPath, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []
+      return {
+        books: books.map(b => ({ id: b.id, title: b.title, location: b.location, progress: b.progress })),
+        highlights,
+        vocab: (await ws.vocab.list()).map(w => ({ id: w.id, headword: w.headword })),
+        reviewState: cards,
+        reviewLog: log
+      }
+    } finally {
+      ws.close()
+    }
+  },
   // A small but real library: books, one highlight, one word, a saved position and one review.
   async seed(dir) {
     mkdirSync(dir, { recursive: true })
