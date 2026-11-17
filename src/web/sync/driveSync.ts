@@ -46,6 +46,9 @@ export class DriveSync {
   private waiters: Array<{ resolve: () => void; reject: (e: unknown) => void }> = []
   private changeCbs = new Set<(paths: string[]) => void>()
   private authCbs = new Set<(e: DriveAuthError) => void>()
+  private syncCbs = new Set<(e: Error) => void>()
+  private syncError: Error | null = null
+  private syncNotified = false
   private unsubscribe: (() => void) | null = null
 
   constructor(
@@ -67,6 +70,12 @@ export class DriveSync {
   onAuthError(cb: (e: DriveAuthError) => void): () => void {
     this.authCbs.add(cb)
     return () => this.authCbs.delete(cb)
+  }
+
+  // Pushes failing for a reason other than auth (after the client's own retries). Fired once until a success.
+  onSyncError(cb: (e: Error) => void): () => void {
+    this.syncCbs.add(cb)
+    return () => this.syncCbs.delete(cb)
   }
 
   pending(): number {
@@ -120,14 +129,20 @@ export class DriveSync {
     if (this.now() - this.lastPull < maxAgeMs) return
     try {
       await this.pull()
-    } catch {
+    } catch (e) {
       // offline or signed out: the mutation goes ahead on local state and is queued (BC4)
+      if (!(e instanceof DriveAuthError || e instanceof DriveError || e instanceof TypeError)) throw e
     }
   }
 
   flush(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.waiters.push({ resolve, reject })
+      // an explicit flush retries now, whatever the backoff
+      if (this.retryTimer) {
+        clearTimeout(this.retryTimer)
+        this.retryTimer = null
+      }
       if (this.paused) this.resume()
       else this.kick()
       this.settle()
@@ -241,7 +256,11 @@ export class DriveSync {
         this.forgetChain(path)
         return
       }
-      console.error('Drive push failed', path, e)
+      this.syncError = e instanceof Error ? e : new Error(String(e))
+      if (!this.syncNotified) {
+        this.syncNotified = true
+        for (const cb of [...this.syncCbs]) cb(this.syncError)
+      }
       this.scheduleRetry()
     } finally {
       this.inflight = null
@@ -262,21 +281,28 @@ export class DriveSync {
   private async pushWrite(item: Pending): Promise<void> {
     const { path, data } = item
     const hash = md5hex(data)
-    let m = this.meta.get(path)
+    const m = this.meta.get(path)
     const startMd5 = m?.md5 ?? null
+    let remote: DriveFile
     if (!m) {
       // Not known on Drive. The other device may have created it since our last pull: adopt it.
       const parentId = await this.ensureFolder(posix.dirname(path))
       const name = posix.basename(path)
       const existing = (await this.drive.listChildren(parentId)).find(f => f.name === name && f.mimeType !== FOLDER_MIME)
       if (!existing) return this.pushed(path, data, startMd5, await this.drive.createFile(name, parentId, data))
-      this.register(path, existing)
-      m = this.meta.get(path)!
+      remote = existing
+    } else {
+      // The changes feed may lag: ask Drive for its current version right before overwriting it.
+      remote = await this.drive.get(m.id)
     }
-    if (m.md5 === hash) return this.pushed(path, data, startMd5, null)
+    const fresh = remote.md5Checksum ?? null
+    if (fresh === hash) {
+      this.register(path, remote)
+      return this.pushed(path, data, startMd5, null)
+    }
     // Drive holds a version this edit did not start from: merge first; the merged bytes requeue.
-    if (m.md5 !== item.baseMd5 && isMergeable(path)) return this.mergeInto(path, item, m)
-    this.pushed(path, data, startMd5, await this.drive.updateFile(m.id, data))
+    if (fresh !== item.baseMd5 && isMergeable(path)) return this.mergeInto(path, item, remote)
+    this.pushed(path, data, startMd5, await this.drive.updateFile(remote.id, data))
   }
 
   private pushed(path: string, data: Uint8Array, startMd5: string | null, res: DriveFile | null): void {
@@ -295,13 +321,19 @@ export class DriveSync {
     }
   }
 
-  // Three-way merge of a queued local edit with Drive's current version `m`; the result is written
-  // locally (so services see it) and queued with `m` as its new base.
-  private async mergeInto(path: string, item: Pending, m: Meta): Promise<void> {
-    const remote = await this.download(m.id, path)
-    const remoteText = dec(remote)
-    const merged = mergeFile(path, item.baseText ?? null, dec(item.data), remoteText)
+  // Three-way merge of a queued local edit with Drive's version `remote`. The result is written
+  // locally (so services see it) and queued with `remote` as its new base.
+  private async mergeInto(path: string, item: Pending, remote: Pick<DriveFile, 'id' | 'mimeType' | 'md5Checksum'>): Promise<void> {
+    const bytes = await this.download(remote.id, path)
+    // Only a downloaded version becomes the base: after a failed download it must still look new.
+    this.register(path, remote)
+    const remoteText = dec(bytes)
     this.baseText.set(path, remoteText)
+    // Merge what the services hold now: an edit made during the download is part of it.
+    const cur = this.vfs.entry(path)
+    if (cur?.kind !== 'file' || !cur.data) return // removed meanwhile: the queued remove stands
+    const merged = mergeFile(path, item.baseText ?? null, dec(cur.data), remoteText)
+    // Any queued item is superseded by the merged bytes, written in this same tick.
     this.dirty.delete(path)
     this.vfs.writeLocal(path, enc(merged))
   }
@@ -345,6 +377,8 @@ export class DriveSync {
 
   private succeeded(): void {
     this.authNotified = false
+    this.syncNotified = false
+    this.syncError = null
     this.failures = 0
   }
 
@@ -355,7 +389,14 @@ export class DriveSync {
       for (const w of this.waiters.splice(0)) w.reject(err)
       return
     }
-    if (this.dirty.size > 0) return
+    if (this.dirty.size > 0) {
+      // backing off after a failure: report it rather than hang
+      if (this.retryTimer && this.syncError) {
+        const err = this.syncError
+        for (const w of this.waiters.splice(0)) w.reject(err)
+      }
+      return
+    }
     const ws = this.waiters.splice(0)
     void Promise.all([...this.persisting.values()]).then(() => ws.forEach(w => w.resolve()))
   }
@@ -484,8 +525,8 @@ export class DriveSync {
       this.dirty.delete(path)
       this.persist(path, null)
     } else if (pending && !pending.mkdir) {
-      this.register(path, f)
-      if (isMergeable(path)) await this.mergeInto(path, pending, this.meta.get(path)!)
+      if (isMergeable(path)) await this.mergeInto(path, pending, f)
+      else this.register(path, f) // not mergeable: the local edit wins when it is pushed
       changed.add(path)
       return
     }

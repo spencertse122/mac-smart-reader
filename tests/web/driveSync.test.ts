@@ -355,4 +355,92 @@ describe('DriveSync', () => {
     await sync.flush()
     expect(remoteJson(fake, '.smartreader/vocab.json')).toEqual({ version: 1, words: [] })
   })
+
+  describe('no edit is lost around a merge', () => {
+    const P = `${SR}/vocab.json`
+    const encJ = (v: unknown) => new TextEncoder().encode(JSON.stringify(v, null, 2) + '\n')
+    const ids = (v: { words: Array<{ id: string }> }) => v.words.map(w => w.id).sort()
+    const addWord = async (id: string) => {
+      const v = JSON.parse(await fs.readFile(P, 'utf8'))
+      v.words.push({ ...v.words[0], id, updatedAt: new Date().toISOString() })
+      await writeJson(P, v)
+    }
+
+    // A local edit A is pending; Drive gets edit R from the "Mac" after our last pull.
+    // `onMedia` runs on the first download after the setup, before its bytes are returned.
+    async function setup(onMedia?: () => Promise<void>): Promise<DriveSync> {
+      let hook: (() => Promise<void>) | undefined
+      const hooked: FakeDrive['fetch'] = async (input, init) => {
+        const res = await fake.fetch(input, init)
+        if (hook && String(input).includes('alt=media')) {
+          const h = hook
+          hook = undefined
+          await h()
+        }
+        return res
+      }
+      const sync = await mounted({ drive: makeClient(hooked) })
+      const v0 = JSON.parse(await fs.readFile(P, 'utf8'))
+      fake.expireToken()
+      await addWord('w_A')
+      await expect(sync.flush()).rejects.toBeInstanceOf(DriveAuthError)
+      fake.setToken('test-token')
+      fake.putFile('.smartreader/vocab.json', encJ({ ...v0, words: [...v0.words, { ...v0.words[0], id: 'w_R' }] }))
+      hook = onMedia
+      return sync
+    }
+
+    it('a remote edit made after the last pull is merged, not overwritten, by the push', async () => {
+      const sync = await setup()
+      await sync.flush()
+      expect(ids(remoteJson(fake, '.smartreader/vocab.json'))).toEqual(['w_A', 'w_R', seed.wordId].sort())
+      expect(await sync.pull()).toBe(false)
+    })
+
+    it('a local write during the merge download (push path) survives', async () => {
+      const sync = await setup(() => addWord('w_B'))
+      await sync.flush()
+      expect(ids(remoteJson(fake, '.smartreader/vocab.json'))).toEqual(['w_A', 'w_B', 'w_R', seed.wordId].sort())
+      expect(ids(JSON.parse(await fs.readFile(P, 'utf8')))).toEqual(['w_A', 'w_B', 'w_R', seed.wordId].sort())
+    })
+
+    it('a local write during the merge download (pull path) survives', async () => {
+      const sync = await setup(() => addWord('w_B'))
+      expect(await sync.pull()).toBe(true)
+      await sync.flush()
+      expect(ids(remoteJson(fake, '.smartreader/vocab.json'))).toEqual(['w_A', 'w_B', 'w_R', seed.wordId].sort())
+      expect(ids(JSON.parse(await fs.readFile(P, 'utf8')))).toEqual(['w_A', 'w_B', 'w_R', seed.wordId].sort())
+    })
+
+    it('a failed merge download does not make the remote version look like our echo', async () => {
+      const sync = await setup(async () => {
+        throw new Error('download dropped')
+      })
+      await expect(sync.pull()).rejects.toThrow('download dropped')
+      expect(await sync.pull()).toBe(true)
+      expect(ids(JSON.parse(await fs.readFile(P, 'utf8')))).toEqual(['w_A', 'w_R', seed.wordId].sort())
+    })
+  })
+
+  it('a non-auth push failure keeps the outbox, is reported, and flush rejects instead of hanging', async () => {
+    const sync = await mounted()
+    const errs = vi.fn()
+    sync.onSyncError(errs)
+    fake.failNext(400)
+    await writeJson(`${SR}/fresh.json`, { a: 1 })
+    await expect(sync.flush()).rejects.toMatchObject({ status: 400 })
+    expect(errs).toHaveBeenCalledTimes(1)
+    expect((await outbox.all()).map(i => i.path)).toEqual([`${SR}/fresh.json`])
+    await sync.flush() // retries at once
+    expect(remoteJson(fake, '.smartreader/fresh.json')).toEqual({ a: 1 })
+    expect(await outbox.all()).toEqual([])
+  })
+
+  it('pullIfStale swallows Drive errors but not programming errors', async () => {
+    const sync = await mounted()
+    fake.failNext(400)
+    await expect(sync.pullIfStale(0)).resolves.toBeUndefined()
+    const unmounted = new DriveSync(vfs, drive, outbox, fake.rootId)
+    await expect(unmounted.pullIfStale(0)).rejects.toThrow(/before mount/)
+  })
 })
