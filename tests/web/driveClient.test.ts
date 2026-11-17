@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { createDriveClient } from '../../src/web/drive/client'
+import { createDriveClient, FILE_FIELDS, LIST_FIELDS, CHANGES_FIELDS } from '../../src/web/drive/client'
 import { DriveAuthError, FOLDER_MIME } from '../../src/web/drive/types'
 import { FakeDrive } from './fakeDrive'
 
@@ -59,6 +59,7 @@ describe('drive client', () => {
     const { drive, client } = setup()
     drive.expireToken()
     await expect(client.listChildren(drive.rootId)).rejects.toBeInstanceOf(DriveAuthError)
+    expect(drive.requests).toHaveLength(1)
     drive.setToken('test-token')
     await expect(client.listChildren(drive.rootId)).resolves.toEqual([])
   })
@@ -82,7 +83,7 @@ describe('drive client', () => {
     drive.putFile('y/z.txt', enc('2'))
     drive.putFile('x.txt', enc('11'))
     const [x] = (await client.listChildren(drive.rootId)).filter((f) => f.name === 'x.txt')
-    await drive.fetch(`https://www.googleapis.com/drive/v3/files/${x.id}`, {
+    await drive.fetch(`https://www.googleapis.com/drive/v3/files/${x.id}?fields=${FILE_FIELDS}&supportsAllDrives=true`, {
       method: 'PATCH',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
       body: JSON.stringify({ trashed: true })
@@ -122,5 +123,78 @@ describe('drive client', () => {
     await drive.seedFromDir(join(__dirname, '..', '..', 'docs'))
     const kids = await client.listChildren(drive.rootId)
     expect(kids.some((k) => k.mimeType === FOLDER_MIME)).toBe(true)
+  })
+
+  it('sends exact list and changes query strings', async () => {
+    const { drive, client } = setup()
+    await client.listChildren(drive.rootId)
+    const t = await client.startPageToken()
+    await client.changes(t)
+    const params = (i: number) => Object.fromEntries(new URL('https://x' + drive.requests[i].split(' ')[1]).searchParams)
+    expect(params(0)).toEqual({
+      q: `'${drive.rootId}' in parents and trashed=false`,
+      fields: 'nextPageToken,files(id,name,mimeType,size,md5Checksum,modifiedTime,version,parents)',
+      pageSize: '1000',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true'
+    })
+    expect(params(2)).toEqual({
+      pageToken: t,
+      fields: 'newStartPageToken,nextPageToken,changes(fileId,removed,file(id,name,mimeType,size,md5Checksum,modifiedTime,parents,trashed))',
+      includeRemoved: 'true',
+      restrictToMyDrive: 'false',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      pageSize: '1000'
+    })
+    expect(LIST_FIELDS).toContain(FILE_FIELDS)
+    expect(CHANGES_FIELDS).toContain('changes(fileId')
+  })
+
+  it('fake rejects wrong fields / missing flags with 400', async () => {
+    const { drive } = setup()
+    const h = { Authorization: 'Bearer test-token' }
+    const base = 'https://www.googleapis.com/drive/v3/files'
+    const q = encodeURIComponent(`'${drive.rootId}' in parents and trashed=false`)
+    expect((await drive.fetch(`${base}?q=${q}&fields=id&supportsAllDrives=true&includeItemsFromAllDrives=true`, { headers: h })).status).toBe(400)
+    expect((await drive.fetch(`${base}?q=${q}&fields=${encodeURIComponent(LIST_FIELDS)}`, { headers: h })).status).toBe(400)
+    expect((await drive.fetch(`https://www.googleapis.com/upload/drive/v3/files?uploadType=media&fields=${FILE_FIELDS}&supportsAllDrives=true`, { method: 'POST', headers: h, body: '{}' })).status).toBe(400)
+  })
+
+  it('retries 403 rateLimitExceeded but not other 403', async () => {
+    const { drive } = setup()
+    const sleeps: number[] = []
+    const client = createDriveClient({ fetch: drive.fetch, getToken: () => 'test-token', sleep: async (ms) => { sleeps.push(ms) } })
+    drive.failNext(403, 'userRateLimitExceeded')
+    await client.listChildren(drive.rootId)
+    expect(sleeps).toEqual([250])
+    drive.failNext(403, 'forbidden')
+    await expect(client.listChildren(drive.rootId)).rejects.toMatchObject({ status: 403 })
+    expect(sleeps).toEqual([250])
+  })
+
+  it('retries network errors', async () => {
+    const { drive } = setup()
+    let n = 0
+    const flaky = (i: string | URL | Request, init?: RequestInit) => (n++ < 2 ? Promise.reject(new TypeError('Failed to fetch')) : drive.fetch(i, init))
+    const client = createDriveClient({ fetch: flaky, getToken: () => 'test-token', sleep: async () => {} })
+    await expect(client.listChildren(drive.rootId)).resolves.toEqual([])
+    expect(n).toBe(3)
+  })
+
+  it('ignores change entries without fileId', async () => {
+    const stub = async () => new Response(JSON.stringify({ changes: [{ removed: true }, { fileId: 'a', removed: true }], newStartPageToken: '9' }))
+    const client = createDriveClient({ fetch: stub, getToken: () => 't', sleep: async () => {} })
+    expect((await client.changes('1')).changes).toEqual([{ fileId: 'a', removed: true }])
+  })
+
+  it('create without mimeType is a plain file', async () => {
+    const { drive } = setup()
+    const res = await drive.fetch(`https://www.googleapis.com/drive/v3/files?fields=${FILE_FIELDS}&supportsAllDrives=true`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'plain', parents: [drive.rootId] })
+    })
+    expect((await res.json()).mimeType).not.toBe(FOLDER_MIME)
   })
 })

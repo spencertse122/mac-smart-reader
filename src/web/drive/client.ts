@@ -21,8 +21,11 @@ export type DriveClient = {
 
 const API = 'https://www.googleapis.com/drive/v3'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
-const FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,version,parents'
-const CHANGE_FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,parents,trashed'
+// Exported so the fake Drive can reject any request that deviates from these exact strings.
+export const FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,version,parents'
+export const LIST_FIELDS = `nextPageToken,files(${FILE_FIELDS})`
+export const CHANGE_FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,modifiedTime,parents,trashed'
+export const CHANGES_FIELDS = `newStartPageToken,nextPageToken,changes(fileId,removed,file(${CHANGE_FILE_FIELDS}))`
 const MAX_RETRIES = 4
 
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
@@ -35,13 +38,31 @@ export function createDriveClient(opts: {
 }): DriveClient {
   const sleep = opts.sleep ?? defaultSleep
 
+  async function isRateLimit403(res: Response): Promise<boolean> {
+    if (res.status !== 403) return false
+    try {
+      const body = (await res.clone().json()) as { error?: { errors?: Array<{ reason?: string }> } }
+      return !!body.error?.errors?.some((e) => e.reason === 'rateLimitExceeded' || e.reason === 'userRateLimitExceeded')
+    } catch {
+      return false
+    }
+  }
+
   async function request(url: string, init: RequestInit = {}): Promise<Response> {
     for (let attempt = 0; ; attempt++) {
       const headers = { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${await opts.getToken()}` }
-      const res = await opts.fetch(url, { ...init, headers })
+      let res: Response
+      try {
+        res = await opts.fetch(url, { ...init, headers })
+      } catch (e) {
+        // fetch rejects with TypeError when the network drops (common on mobile)
+        if (!(e instanceof TypeError) || attempt >= MAX_RETRIES) throw e
+        await sleep(Math.min(250 * 2 ** attempt, 30_000))
+        continue
+      }
       if (res.status === 401) throw new DriveAuthError()
       if (res.ok) return res
-      const retryable = res.status === 429 || res.status >= 500
+      const retryable = res.status === 429 || res.status >= 500 || (await isRateLimit403(res))
       if (!retryable || attempt >= MAX_RETRIES) throw new DriveError(res.status)
       await sleep(Math.min(250 * 2 ** attempt, 30_000))
     }
@@ -57,7 +78,7 @@ export function createDriveClient(opts: {
     do {
       const params: Record<string, string> = {
         q,
-        fields: `nextPageToken,files(${FILE_FIELDS})`,
+        fields: LIST_FIELDS,
         pageSize: '1000',
         supportsAllDrives: 'true',
         includeItemsFromAllDrives: 'true'
@@ -152,7 +173,7 @@ export function createDriveClient(opts: {
       for (;;) {
         const params = qs({
           pageToken,
-          fields: `newStartPageToken,nextPageToken,changes(fileId,removed,file(${CHANGE_FILE_FIELDS}))`,
+          fields: CHANGES_FIELDS,
           includeRemoved: 'true',
           restrictToMyDrive: 'false',
           supportsAllDrives: 'true',
@@ -160,7 +181,8 @@ export function createDriveClient(opts: {
           pageSize: '1000'
         })
         const page = await json<{ changes: DriveChange[]; nextPageToken?: string; newStartPageToken?: string }>(`${API}/changes?${params}`)
-        out.push(...page.changes)
+        // shared-drive change entries can lack fileId; nothing to apply for them
+        out.push(...page.changes.filter((c) => c.fileId))
         if (page.nextPageToken) pageToken = page.nextPageToken
         else return { changes: out, newStartPageToken: page.newStartPageToken ?? pageToken }
       }

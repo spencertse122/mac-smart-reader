@@ -2,6 +2,7 @@
 import { createHash } from 'crypto'
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
+import { CHANGES_FIELDS, FILE_FIELDS, LIST_FIELDS } from '../../src/web/drive/client'
 
 const FOLDER = 'application/vnd.google-apps.folder'
 const PAGE = 100
@@ -30,14 +31,14 @@ export class FakeDrive {
   private log: string[] = []
   private nextId = 1
   private token: string | null = 'test-token'
-  private failures: number[] = []
+  private failures: Array<{ status: number; reason?: string }> = []
 
   constructor() {
     this.entries.set(this.rootId, { meta: this.mk('My Drive', FOLDER, []) })
     this.entries.get(this.rootId)!.meta.id = this.rootId
   }
 
-  failNext(status: number) { this.failures.push(status) }
+  failNext(status: number, reason?: string) { this.failures.push({ status, reason }) }
   expireToken() { this.token = null }
   setToken(t: string) { this.token = t }
 
@@ -127,20 +128,30 @@ export class FakeDrive {
     this.requests.push(`${method} ${url.pathname}${url.search}`)
 
     const fail = this.failures.shift()
-    if (fail !== undefined) return json(fail, { error: { code: fail } })
+    if (fail) return json(fail.status, { error: { code: fail.status, ...(fail.reason ? { errors: [{ reason: fail.reason }] } : {}) } })
     if (this.token === null || headers.get('Authorization') !== `Bearer ${this.token}`) return json(401, { error: { code: 401 } })
 
     const path = url.pathname
     const sp = url.searchParams
     let m: RegExpMatchArray | null
 
+    const bad = this.validate(method, path, sp)
+    if (bad) return json(400, { error: { code: 400, message: `FakeDrive: ${bad}` } })
+
     if (method === 'GET' && path === '/drive/v3/files') return this.list(sp)
     if (method === 'GET' && path === '/drive/v3/changes/startPageToken') return json(200, { startPageToken: String(this.log.length) })
     if (method === 'GET' && path === '/drive/v3/changes') return this.changes(sp)
     if (method === 'POST' && path === '/drive/v3/files') {
       const md = JSON.parse(new TextDecoder().decode(body))
-      const e = this.addFolder(md.name, md.parents?.[0] ?? this.rootId)
-      if (md.mimeType && md.mimeType !== FOLDER) e.meta.mimeType = md.mimeType
+      // like real Drive: only an explicit folder mimeType makes a folder; otherwise an empty plain file
+      let e: Entry
+      if (md.mimeType === FOLDER) e = this.addFolder(md.name, md.parents?.[0] ?? this.rootId)
+      else {
+        e = { meta: this.mk(md.name, md.mimeType ?? 'application/octet-stream', [md.parents?.[0] ?? this.rootId]) }
+        this.setData(e, new Uint8Array())
+        this.entries.set(e.meta.id, e)
+        this.log.push(e.meta.id)
+      }
       return json(200, e.meta)
     }
     if (method === 'POST' && path === '/upload/drive/v3/files') {
@@ -191,6 +202,25 @@ export class FakeDrive {
       }
     }
     return json(404, { error: { code: 404, message: `FakeDrive: unhandled ${method} ${path}` } })
+  }
+
+  // Reject requests that would misbehave on real Drive: wrong fields, missing shared-drive flags, wrong uploadType.
+  private validate(method: string, path: string, sp: URLSearchParams): string | null {
+    const need = (exp: Record<string, string>) => {
+      for (const [k, v] of Object.entries(exp)) if (sp.get(k) !== v) return `${k} must be ${v}, got ${sp.get(k)}`
+      return null
+    }
+    const all = { supportsAllDrives: 'true' }
+    if (path === '/drive/v3/files' && method === 'GET') return need({ ...all, includeItemsFromAllDrives: 'true', fields: LIST_FIELDS })
+    if (path === '/drive/v3/changes/startPageToken') return need(all)
+    if (path === '/drive/v3/changes')
+      return need({ ...all, includeItemsFromAllDrives: 'true', includeRemoved: 'true', restrictToMyDrive: 'false', pageSize: '1000', fields: CHANGES_FIELDS })
+    if (path === '/drive/v3/files') return need({ ...all, fields: FILE_FIELDS })
+    if (path === '/upload/drive/v3/files') return need({ ...all, uploadType: 'multipart', fields: FILE_FIELDS })
+    if (path.startsWith('/upload/drive/v3/files/')) return need({ ...all, uploadType: 'media', fields: FILE_FIELDS })
+    if (path.startsWith('/drive/v3/files/'))
+      return sp.get('alt') === 'media' ? need(all) : need({ ...all, fields: FILE_FIELDS })
+    return null
   }
 
   private list(sp: URLSearchParams): Response {
