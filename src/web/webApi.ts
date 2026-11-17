@@ -13,7 +13,8 @@ type Folder = { id: string; name: string }
 
 export interface WebApiDeps {
   drive: DriveClient
-  outbox: OutboxStore
+  // One outbox per Drive folder: queued paths from folder A must never replay into folder B.
+  outboxFor: (folderId: string) => OutboxStore
   pickFolder: () => Promise<Folder | null>
   savedFolder: () => Folder | null
   rememberFolder: (f: Folder) => void
@@ -21,6 +22,7 @@ export interface WebApiDeps {
   storage?: Pick<Storage, 'getItem' | 'setItem'>
   // Poll every 30 s while visible and on becoming visible. Off in tests.
   autoPull?: boolean
+  now?: () => Date
 }
 
 export type WebApi = SmartReaderApi & { sync(): DriveSync | null; dispose(): void }
@@ -32,6 +34,7 @@ export function createWebApi(deps: WebApiDeps): WebApi {
   let sync: DriveSync | null = null
   let mountedId: string | null = null
   let unsubSync: (() => void) | null = null
+  let unsubErr: (() => void) | null = null
   const subs = {
     review: new Set<() => void>(),
     library: new Set<() => void>(),
@@ -69,19 +72,30 @@ export function createWebApi(deps: WebApiDeps): WebApi {
       : null
   if (timer) document.addEventListener('visibilitychange', onVisibility)
 
+  // Builds and mounts the new sync completely before touching live state, so a failure leaves the old library working.
   async function mount(f: Folder): Promise<void> {
+    const vfs = new Vfs()
+    const next = new DriveSync(vfs, deps.drive, deps.outboxFor(f.id), f.id)
+    try {
+      await next.mount()
+    } catch (e) {
+      next.stop()
+      throw e
+    }
+    setVfs(vfs)
     ws?.close()
     ws = null
     unsubSync?.()
-    const vfs = new Vfs()
-    setVfs(vfs)
-    const next = new DriveSync(vfs, deps.drive, deps.outbox, f.id)
-    await next.mount()
+    unsubErr?.()
+    sync?.stop()
     sync = next
     mountedId = f.id
     unsubSync = next.onChange(() => {
       reviewChanged()
       libraryChanged()
+    })
+    unsubErr = next.onSyncError(() => {
+      for (const cb of [...subs.toast]) cb({ kind: 'warning', message: "Couldn't sync to Google Drive — will retry." })
     })
   }
 
@@ -94,6 +108,8 @@ export function createWebApi(deps: WebApiDeps): WebApi {
         document.removeEventListener('visibilitychange', onVisibility)
       }
       unsubSync?.()
+      unsubErr?.()
+      sync?.stop()
       ws?.close()
     },
     settings: {
@@ -115,7 +131,8 @@ export function createWebApi(deps: WebApiDeps): WebApi {
           if (mountedId !== f.id || !sync) await mount(f)
           const next = await openWebWorkspace('/library', {
             newCardsPerDay: async () => (await settings.get()).newCardsPerDay,
-            onReviewChanged: reviewChanged
+            onReviewChanged: reviewChanged,
+            now: deps.now
           })
           ws?.close()
           ws = next

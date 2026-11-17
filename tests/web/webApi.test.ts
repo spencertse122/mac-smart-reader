@@ -26,18 +26,20 @@ let fake: FakeDrive
 let seed: SeedSummary
 let api: WebApi
 let n = 0
+let prefix = 0
 let folder: { id: string; name: string } | null
 
-function makeApi(storage = memStorage()): WebApi {
+function makeApi(storage = memStorage(), now?: () => Date): WebApi {
   return createWebApi({
     drive: createDriveClient({ fetch: fake.fetch, getToken: () => 'test-token', sleep: async () => {} }),
-    outbox: idbOutbox(`webapi-outbox-${n++}`),
+    outboxFor: id => idbOutbox(`webapi-outbox-${prefix}-${id}`),
     pickFolder: async () => ({ id: fake.rootId, name: 'Books' }),
     savedFolder: () => folder,
     rememberFolder: f => void (folder = f),
     cache: idbBookCache(`webapi-books-${n}`),
     storage,
-    autoPull: false
+    autoPull: false,
+    now
   })
 }
 
@@ -48,6 +50,7 @@ function dumpFake(): Dump {
 }
 
 beforeEach(async () => {
+  prefix++
   fake = new FakeDrive()
   seed = seedFake(fake)
   folder = { id: fake.rootId, name: 'Books' }
@@ -70,22 +73,24 @@ describe('web api', () => {
   })
 
   it('review.queue includes the Mac highlight and the word card', async () => {
-    const ids = (await api.review.queue()).map(c => c.highlightId)
+    expect((await api.review.queue()).map(c => c.highlightId)).toContain(seed.wordId)
+    // the Mac rated its highlight 'good', so it is scheduled; a month later it is due
+    const later = makeApi(memStorage(), () => new Date(Date.now() + 30 * 86_400_000))
+    await later.library.open('/library')
+    const ids = (await later.review.queue()).map(c => c.highlightId)
+    expect(ids).toContain(seed.highlightId)
     expect(ids).toContain(seed.wordId)
-    // the Mac already rated its highlight 'good', so it is scheduled, not due; a fresh web highlight is queued
-    expect(ids).not.toContain(seed.highlightId)
-    const h = await api.highlights.add(seed.epubId, {
-      location: 'epubcfi(/6/12!/4/2/1:0)', quote: { exact: 'fresh', prefix: '', suffix: '' }, context: 'fresh',
-      chapter: 'c3', position: 0.4, color: 'green', note: null
-    })
-    expect((await api.review.queue()).map(c => c.highlightId)).toContain(h.id)
+    later.dispose()
   })
 
   it('readBook returns the bytes and caches them by driveId:md5', async () => {
     const b = seed.books.find(x => x.id === seed.epubId)!
     const r = await api.library.readBook(seed.epubId)
     expect(r.data.length).toBeGreaterThan(0)
+    const downloads = () => fake.requests.filter(q => q.includes('alt=media')).length
+    const before = downloads()
     const r2 = await api.library.readBook(seed.epubId)
+    expect(downloads()).toBe(before)
     expect(r2.data.length).toBe(r.data.length)
     expect(r.name).toBe(b.path.split('/').pop())
   })
@@ -103,21 +108,68 @@ describe('web api', () => {
     expect(JSON.stringify(after.reviewState)).not.toBe(JSON.stringify(before.reviewState))
   })
 
-  it('web edits survive a concurrent Mac write', async () => {
+  it('web edits survive a concurrent Mac write to the same file', async () => {
+    const slug = seed.books.find(b => b.id === seed.epubId)!.slug
+    const path = `.smartreader/books/${slug}/highlights.json`
     const h = await api.highlights.add(seed.epubId, {
       location: 'epubcfi(/6/10!/4/2/1:0)', quote: { exact: 'web quote', prefix: '', suffix: '' }, context: 'web quote',
       chapter: 'c2', position: 0.3, color: 'blue', note: null
     })
-    // Mac side rewrites review-state.json on Drive before the web push
-    const path = '.smartreader/review-state.json'
-    const state = JSON.parse(new TextDecoder().decode(fake.readFile(path)))
-    state.cards = { ...state.cards, 'mac-card': { macOnly: true } }
-    fake.putFile(path, new TextEncoder().encode(JSON.stringify(state)))
+    // the Mac appends its own highlight to the same file on Drive before the web push lands
+    const remote = JSON.parse(new TextDecoder().decode(fake.readFile(path)))
+    remote.highlights.push({ ...remote.highlights[0], id: 'h_mac-second', quote: { ...remote.highlights[0].quote, exact: 'mac second' } })
+    fake.putFile(path, new TextEncoder().encode(JSON.stringify(remote, null, 2)))
     await api.sync()!.flush()
     await api.sync()!.pull()
+    const ids = (await api.highlights.list(seed.epubId)).map(x => x.id)
+    expect(ids).toEqual(expect.arrayContaining([seed.highlightId, h.id, 'h_mac-second']))
     const d = dumpFake()
-    expect(d.highlights[seed.epubId].map(x => x.id)).toEqual(expect.arrayContaining([seed.highlightId, h.id]))
-    expect(JSON.stringify(d.reviewState)).toContain('mac-card')
+    expect(d.highlights[seed.epubId].map(x => x.id)).toEqual(expect.arrayContaining([seed.highlightId, h.id, 'h_mac-second']))
+  })
+
+  it('a failed folder switch leaves the previous library working', async () => {
+    const b = createWebApi({
+      drive: createDriveClient({ fetch: fake.fetch, getToken: () => 'test-token', sleep: async () => {} }),
+      outboxFor: id => idbOutbox(`webapi-fail-${prefix}-${id}`),
+      pickFolder: async () => ({ id: 'other', name: 'Other' }),
+      savedFolder: () => folder,
+      rememberFolder: f => void (folder = f),
+      cache: idbBookCache(`webapi-books-fail-${prefix}`),
+      storage: memStorage(),
+      autoPull: false
+    })
+    expect((await b.library.open('/library')).ok).toBe(true)
+    fake.failNext(401)
+    await expect(b.library.chooseFolder()).rejects.toThrow()
+    expect(folder!.id).toBe(fake.rootId)
+    expect((await b.library.list()).length).toBe(seed.books.length)
+    const h = await b.highlights.add(seed.epubId, {
+      location: 'epubcfi(/6/10!/4/2/1:0)', quote: { exact: 'still works', prefix: '', suffix: '' }, context: 'x',
+      chapter: 'c2', position: 0.3, color: 'blue', note: null
+    })
+    await b.sync()!.flush()
+    expect(dumpFake().highlights[seed.epubId].map(x => x.id)).toContain(h.id)
+    b.dispose()
+  })
+
+  it('pending edits of folder A are not pushed into folder B, and are pushed when A is remounted', async () => {
+    const client = createDriveClient({ fetch: fake.fetch, getToken: () => 'test-token', sleep: async () => {} })
+    fake.putFile('B/readme.txt', new TextEncoder().encode('b'))
+    const bId = (await client.listChildren(fake.rootId)).find(f => f.name === 'B')!.id
+    await idbOutbox(`webapi-outbox-${prefix}-${fake.rootId}`).put({ path: '/library/knowledge/pending.txt', data: new TextEncoder().encode('A'), baseMd5: null })
+    folder = { id: bId, name: 'B' }
+    const b = makeApi()
+    expect((await b.library.open('/library')).ok).toBe(true)
+    await b.sync()!.flush()
+    expect(() => fake.readFile('knowledge/pending.txt')).toThrow()
+    expect(() => fake.readFile('B/knowledge/pending.txt')).toThrow()
+    b.dispose()
+    folder = { id: fake.rootId, name: 'A' }
+    const a = makeApi()
+    expect((await a.library.open('/library')).ok).toBe(true)
+    await a.sync()!.flush()
+    expect(new TextDecoder().decode(fake.readFile('knowledge/pending.txt'))).toBe('A')
+    a.dispose()
   })
 
   it('vocab.lookup returns unavailable', async () => {

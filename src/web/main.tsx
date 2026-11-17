@@ -22,7 +22,7 @@ const savedFolder = (): Folder | null => {
 
 window.api = createWebApi({
   drive: createDriveClient({ fetch: (i, init) => fetch(i, init), getToken: () => { throw new DriveAuthError('Not signed in') } }),
-  outbox: idbOutbox(),
+  outboxFor: id => idbOutbox(`sr.outbox.${id}`),
   pickFolder: async () => null,
   savedFolder,
   rememberFolder: f => {

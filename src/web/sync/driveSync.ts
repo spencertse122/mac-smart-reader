@@ -78,6 +78,18 @@ export class DriveSync {
     return () => this.syncCbs.delete(cb)
   }
 
+  // Detaches from the VFS and cancels the retry timer; pending edits stay in the outbox for the next mount.
+  stop(): void {
+    this.unsubscribe?.()
+    this.unsubscribe = null
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = null
+    this.paused = new DriveAuthError('stopped')
+    this.changeCbs.clear()
+    this.authCbs.clear()
+    this.syncCbs.clear()
+  }
+
   pending(): number {
     return this.dirty.size + (this.inflight && !this.dirty.has(this.inflight) ? 1 : 0)
   }
