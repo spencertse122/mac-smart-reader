@@ -60,7 +60,7 @@ function Shell() {
       window.api.on.menu(a => {
         if (a.type === 'open-folder') void chooseAndOpenLibrary(dispatch)
         else if (a.type === 'open-library') void openLibrary(dispatch, a.path)
-        else if (a.type === 'toggle-terminal') dispatch({ type: 'toggleTerminal' })
+        else if (a.type === 'toggle-terminal') { if (window.api.platform !== 'web') dispatch({ type: 'toggleTerminal' }) }
         else if (a.type === 'continue-reading') openLatest()
         else if (a.type === 'toggle-pomodoro') pomodoro.current.toggle()
         else if (a.type === 'new-note') {
@@ -102,7 +102,7 @@ function Shell() {
           {v.name === 'stats' && <StatsView />}
           {v.name === 'vocab' && <VocabView />}
         </div>
-        {state.terminalMounted && <TerminalPanel visible={state.terminalOpen} />}
+        {window.api.platform !== 'web' && state.terminalMounted && <TerminalPanel visible={state.terminalOpen} />}
       </main>
       <StatusBar />
       <Toasts />

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rename, readFile, copyFile, rm, stat } from 'node:fs/promises'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mkdtemp, mkdir, writeFile, rename, readFile, copyFile, rm, stat, utimes } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -224,5 +224,19 @@ describe('LibraryService', () => {
     expect(b.status).toBe('drm')
     expect(b.statusReason).toMatch(/DRM/)
     expect((await stat(join(root, 'locked.epub'))).size).toBeGreaterThan(0)
+  })
+})
+
+describe('LibraryService trustMtime false', () => {
+  it('keeps id and stored mtime when only mtime differs', async () => {
+    await put('a.epub', 'hello')
+    const first = (await new LibraryService(root, fixed).scan())[0]
+    const t = new Date(first.mtimeMs + 5000)
+    await utimes(join(root, 'a.epub'), t, t)
+    const hash = vi.fn(async () => 'deadbeefdeadbeef')
+    const again = (await new LibraryService(root, fixed, hash, { trustMtime: false }).scan())[0]
+    expect(hash).not.toHaveBeenCalled()
+    expect(again.id).toBe(first.id)
+    expect(again.mtimeMs).toBe(first.mtimeMs)
   })
 })

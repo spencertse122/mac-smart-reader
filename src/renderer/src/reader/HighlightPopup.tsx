@@ -104,7 +104,7 @@ export function HighlightPopup({ state, onClose, onDraft }: { state: PopupState;
         >
           <NotebookPen size={16} />
         </button>
-        {state.mode === 'new' && (
+        {state.mode === 'new' && window.api.platform !== 'web' && (
           <button
             className={`hl-action ${look !== 'idle' ? 'active' : ''}`}
             onClick={runLookUp}

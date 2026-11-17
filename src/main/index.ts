@@ -125,6 +125,11 @@ async function bootstrap(): Promise<void> {
   wc.on('did-navigate', releasePtys)
   wc.on('render-process-gone', releasePtys)
   wc.on('destroyed', releasePtys)
+  // Files may have changed on disk (Drive sync) while the app was in the background.
+  mainWindow.on('focus', () => {
+    send(IPC.eventReviewChanged)
+    send(IPC.eventLibraryChanged)
+  })
   mainWindow.on('closed', () => {
     ipc.closeAll()
     mainWindow = null

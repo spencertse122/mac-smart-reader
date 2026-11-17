@@ -14,6 +14,7 @@ export type MenuAction =
   | { type: 'continue-reading' }
 
 export interface SmartReaderApi {
+  platform: 'mac' | 'web'
   settings: {
     get(): Promise<Settings>
     update(patch: Partial<Settings>): Promise<Settings>

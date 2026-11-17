@@ -13,9 +13,11 @@ export function StatusBar() {
       </button>
       <span className="spacer" />
       <KnowledgeRate />
-      <button className="status-item" title="Toggle terminal (⌘J)" onClick={() => dispatch({ type: 'toggleTerminal' })}>
-        <TerminalSquare size={13} /> Terminal
-      </button>
+      {window.api.platform !== 'web' && (
+        <button className="status-item" title="Toggle terminal (⌘J)" onClick={() => dispatch({ type: 'toggleTerminal' })}>
+          <TerminalSquare size={13} /> Terminal
+        </button>
+      )}
     </footer>
   )
 }

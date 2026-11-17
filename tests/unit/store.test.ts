@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { utimes, stat } from 'node:fs/promises'
 import { mkdtemp, readFile, writeFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeJson, readJson, setRecoveryListener } from '../../src/main/store/atomic'
+
+const reads = vi.hoisted(() => ({ n: 0 }))
+vi.mock('../../src/main/store/atomic', async orig => {
+  const m = await orig<typeof import('../../src/main/store/atomic')>()
+  return { ...m, readJson: (...a: Parameters<typeof m.readJson>) => { reads.n++; return m.readJson(...a) } }
+})
 import { appendJsonl, readJsonl } from '../../src/main/store/jsonl'
 import { jsonFile } from '../../src/main/store/jsonFile'
 
@@ -83,5 +90,40 @@ describe('jsonFile', () => {
     await expect(f.update(() => { throw new Error('boom') })).rejects.toThrow('boom')
     await f.update(d => { d.n = 5 })
     expect((await f.read()).n).toBe(5)
+  })
+})
+
+describe('jsonFile external changes', () => {
+  it('reloads when the file changed on disk', async () => {
+    const p = join(dir, 'ext.json')
+    const f = jsonFile(p, () => ({ n: 0 }))
+    await f.update(d => { d.n = 1 })
+    expect(await f.read()).toEqual({ n: 1 })
+    await writeFile(p, JSON.stringify({ n: 10 }))
+    const t = new Date((await stat(p)).mtimeMs + 2000)
+    await utimes(p, t, t)
+    expect(await f.read()).toEqual({ n: 10 })
+    await f.update(d => { d.n++ })
+    expect(JSON.parse(await readFile(p, 'utf8'))).toEqual({ n: 11 })
+  })
+
+  it('skips writing when nothing changed', async () => {
+    const p = join(dir, 'noop.json')
+    const afterWrite = vi.fn(async () => undefined)
+    const f = jsonFile(p, () => ({ n: 0 }), { afterWrite })
+    await f.update(d => { d.n = 1 })
+    afterWrite.mockClear()
+    const before = (await stat(p)).mtimeMs
+    await f.update(() => {})
+    expect((await stat(p)).mtimeMs).toBe(before)
+    expect(afterWrite).not.toHaveBeenCalled()
+  })
+
+  it('does not reload its own write', async () => {
+    const f = jsonFile(join(dir, 'own.json'), () => ({ n: 0 }))
+    await f.update(d => { d.n = 1 })
+    const before = reads.n
+    await f.read()
+    expect(reads.n).toBe(before)
   })
 })

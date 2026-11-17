@@ -11,6 +11,7 @@ function listen<A extends unknown[]>(channel: string, cb: (...args: A) => void):
 }
 
 const api: SmartReaderApi = {
+  platform: 'mac',
   settings: {
     get: () => invoke(IPC.settingsGet),
     update: patch => invoke(IPC.settingsUpdate, patch)

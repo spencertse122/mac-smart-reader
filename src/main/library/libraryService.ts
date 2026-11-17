@@ -28,7 +28,9 @@ export class LibraryService {
   constructor(
     readonly root: string,
     private now: () => Date = () => new Date(),
-    private hash: (abs: string) => Promise<string> = computeBookId
+    private hash: (abs: string) => Promise<string> = computeBookId,
+    // The web build can't trust mtimes (Drive rewrites them), so it keys on size alone.
+    private opts: { trustMtime?: boolean } = {}
   ) {
     this.dataDir = join(root, '.smartreader')
     this.file = jsonFile<LibraryFile>(join(this.dataDir, 'library.json'), () => ({ version: 1, books: {} }))
@@ -48,7 +50,7 @@ export class LibraryService {
         continue
       }
       const known = byPath.get(rel)
-      const unchanged = known && known.fileSize === st.size && known.mtimeMs === st.mtimeMs
+      const unchanged = known && known.fileSize === st.size && (this.opts.trustMtime === false || known.mtimeMs === st.mtimeMs)
       const id = unchanged ? known.id : await this.hash(abs)
       found.push({ rel, id, size: st.size, mtimeMs: st.mtimeMs })
     }
@@ -68,7 +70,8 @@ export class LibraryService {
         seen.add(f.id)
         const existing = draft.books[f.id]
         if (existing) {
-          Object.assign(existing, { path: f.rel, fileSize: f.size, mtimeMs: f.mtimeMs, missing: false })
+          Object.assign(existing, { path: f.rel, fileSize: f.size, missing: false })
+          if (this.opts.trustMtime !== false) existing.mtimeMs = f.mtimeMs
           continue
         }
         const title = titleFromFilename(f.rel)
